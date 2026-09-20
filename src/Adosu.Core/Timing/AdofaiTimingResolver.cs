@@ -11,6 +11,146 @@ public static class AdofaiTimingResolver
     private const double AngleEpsilon = 1e-6;
     private const string AdofaiUnclassifiedActionCode = "ADF-ACTION-UNCLASSIFIED";
     private const string AdofaiFloorRangeCode = "ADF-FLOOR-RANGE";
+    private const string AdofaiSpeedValueCode = "ADF-SPEED-VALUE";
+    private const string AdofaiSpeedOffsetCode = "ADF-SPEED-OFFSET";
+    private const string AdofaiDurationValueCode = "ADF-DURATION-VALUE";
+
+    /// <summary>
+    /// A tempo is usable only when the real duration it derives stays finite
+    /// and positive. The largest travel a single floor can express is a full
+    /// 360-degree turn, so the invariant is checked on that worst case rather
+    /// than on an arbitrary hand-picked BPM threshold: very small tempos make
+    /// `angle / 180 * 60 / bpm` overflow, very large ones make it underflow.
+    /// </summary>
+    private static bool IsUsableTempo(double bpm)
+    {
+        if (!double.IsFinite(bpm) || bpm <= 0)
+        {
+            return false;
+        }
+
+        var worstCaseSeconds = 360.0 / 180.0 * 60.0 / bpm;
+        return double.IsFinite(worstCaseSeconds) && worstCaseSeconds > 0;
+    }
+
+    /// <summary>
+    /// A duration in beats is usable only when it is finite and non-negative.
+    /// Zero is legal (an explicit no-op pause); a missing or non-numeric
+    /// duration, a non-finite one (including the `1e309` -&gt; +Infinity parse
+    /// overflow) and a negative one are illegal. There is deliberately no
+    /// clamp, absolute value, epsilon or implicit default: an unrepresentable
+    /// source value is rejected, never repaired.
+    /// </summary>
+    private static bool IsUsableDurationBeats(double? durationBeats) =>
+        durationBeats is { } value && double.IsFinite(value) && value >= 0;
+
+    private static bool IsUsableDurationSeconds(double value) =>
+        double.IsFinite(value) && value >= 0;
+
+    /// <summary>
+    /// One Pause candidate that has passed the raw beat check and now waits for
+    /// the floor's canonical end tempo before its seconds can be validated.
+    /// The whole candidate delay is validated against the same floor-end BPM
+    /// and the same `beats * 60 / BPM` expression that finally advances the
+    /// floor, so a value that is legal under the entry BPM but not under the
+    /// canonical floor-end BPM is rejected instead of overflowing the axis.
+    /// </summary>
+    private sealed record PauseCandidate(
+        AdofaiAction Action,
+        SourceProvenance Provenance,
+        double DurationBeats);
+
+    /// <summary>
+    /// Validates and commits the still-uncommitted Pause candidates of one
+    /// floor against its canonical floor-end tempo. Each candidate is checked
+    /// as a transaction over the Pauses accepted so far: the accumulated raw
+    /// beats must stay finite and non-negative, the seconds derived from them
+    /// with the final `beats * 60 / BPM` step must stay finite and
+    /// non-negative, and the resulting floor end must stay finite. Only the
+    /// offending Pause is rejected; previously accepted Pauses, other tempo and
+    /// state changes, and the application order are preserved.
+    ///
+    /// Returns the canonical seconds contributed by all accepted Pauses on the
+    /// floor, so the caller advances the floor with that exact value instead of
+    /// recomputing it through a different expression.
+    /// </summary>
+    private static double RejectNonCanonicalPauses(
+        List<PauseCandidate> pending,
+        double pauseSeconds,
+        double floorEndBpm,
+        double floorTravelSeconds,
+        double floorStartTime,
+        ICollection<GameplayStateChange> gameplayChanges,
+        ICollection<Diagnostic> diagnostics)
+    {
+        var acceptedBeats = 0d;
+        var acceptedSeconds = pauseSeconds;
+        foreach (var candidate in pending)
+        {
+            var candidateBeats = acceptedBeats + candidate.DurationBeats;
+            var candidateDelaySeconds = candidateBeats * 60.0 / floorEndBpm;
+            var candidateDuration = floorTravelSeconds + candidateDelaySeconds;
+            var rejection = (string?)null;
+            if (!double.IsFinite(candidateBeats) || candidateBeats < 0)
+            {
+                rejection = $"Pause.duration {candidate.DurationBeats.ToString(CultureInfo.InvariantCulture)} beats overflows the accumulated pause on this floor.";
+            }
+            else if (!IsUsableDurationSeconds(candidateDelaySeconds))
+            {
+                rejection = $"Pause.duration {candidate.DurationBeats.ToString(CultureInfo.InvariantCulture)} beats at floor-end BPM {floorEndBpm.ToString(CultureInfo.InvariantCulture)} produces a non-finite or negative delay in seconds.";
+            }
+            else if (!double.IsFinite(floorStartTime + candidateDuration))
+            {
+                rejection = $"Pause.duration {candidate.DurationBeats.ToString(CultureInfo.InvariantCulture)} beats would push the floor end time outside the finite range.";
+            }
+
+            if (rejection is not null)
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Error,
+                    AdofaiDurationValueCode,
+                    rejection,
+                    candidate.Provenance));
+            }
+            else
+            {
+                acceptedBeats = candidateBeats;
+                acceptedSeconds = acceptedBeats * 60.0 / floorEndBpm;
+            }
+
+            gameplayChanges.Add(new GameplayStateChange(
+                GameplayStateChangeKind.Pause,
+                candidate.Action.EventType,
+                floorStartTime,
+                candidate.Provenance,
+                DurationBeats: rejection is null ? candidate.DurationBeats : null,
+                RawData: RawText(candidate.Action.Raw),
+                Application: rejection is null
+                    ? GameplayStateChangeApplication.Applied
+                    : GameplayStateChangeApplication.Rejected));
+        }
+
+        return acceptedSeconds;
+    }
+
+    /// <summary>
+    /// Reports an illegal Hold/FreeRoam duration. The event keeps its raw
+    /// record and provenance, exposes a canonical-empty DurationBeats and
+    /// carries <see cref="GameplayStateChangeApplication.Rejected"/>.
+    /// </summary>
+    private static void ReportIllegalDuration(
+        ICollection<Diagnostic> diagnostics,
+        string eventType,
+        AdofaiAction action,
+        int floorIndex,
+        double? rawDuration)
+    {
+        diagnostics.Add(new Diagnostic(
+            DiagnosticSeverity.Error,
+            AdofaiDurationValueCode,
+            $"{eventType}.duration must be a finite non-negative number of beats; received '{rawDuration?.ToString(CultureInfo.InvariantCulture) ?? "<missing>"}'. The event is retained with its raw source record but is canonical-empty.",
+            Provenance(action, floorIndex)));
+    }
 
     /// <summary>
     /// Stable ordering for any derived event that exposes source order over
@@ -71,12 +211,12 @@ public static class AdofaiTimingResolver
                 "No positive base BPM was supplied; the resolver used 120 BPM as a safe fallback."));
         }
 
-        if (baseBpm <= 0 || double.IsNaN(baseBpm) || double.IsInfinity(baseBpm))
+        if (!IsUsableTempo(baseBpm))
         {
             diagnostics.Add(new Diagnostic(
                 DiagnosticSeverity.Error,
                 "ADF009",
-                $"Base BPM must be positive; received {baseBpm}. The resolver used 120 BPM."));
+                $"Base BPM must be finite, positive and small enough that a full floor's duration stays finite; received {baseBpm.ToString(CultureInfo.InvariantCulture)}. The resolver used 120 BPM."));
             baseBpm = 120;
         }
 
@@ -101,6 +241,14 @@ public static class AdofaiTimingResolver
         var twirl = false;
         var planetCount = 2;
         var floorStartTimes = new double[floors.Count];
+
+        // The semantic application ordinal for stateful derived events. It
+        // advances in floor traversal order and, within a floor, in source
+        // order. It is the track that state replay must follow; it is never
+        // derived from the (TimeSeconds, SourceIndex) presentation order,
+        // which can invert same-timestamp events originating on different
+        // floors.
+        var applicationOrder = 0;
 
         // A floor index that is null, negative, or beyond the last floor is
         // not silently dropped from the semantic tracks. Each such action is
@@ -148,7 +296,14 @@ public static class AdofaiTimingResolver
             // pass. Geometry-changing state (Twirl, MultiPlanet) is applied
             // here as well, so multiple action types on the same floor can
             // never be reordered relative to each other in GameplayState.
-            var stateDurationBeats = 0d;
+            //
+            // Pause needs the floor's canonical end tempo, which is only known
+            // after ResolveFloorTempo. Its duration is therefore validated raw
+            // here, deferred, and committed in source order below with the same
+            // floor-end BPM and the same expression that advances the floor.
+            var pendingPauses = new List<PauseCandidate>();
+            var pauseSeconds = 0d;
+            var hasPendingPause = false;
             foreach (var action in floorActions)
             {
                 switch (action.EventType)
@@ -161,7 +316,8 @@ public static class AdofaiTimingResolver
                             floorStartTimes[floorIndex],
                             Provenance(action, floorIndex),
                             TwirlStateAfter: twirl,
-                            RawData: RawText(action.Raw)));
+                            RawData: RawText(action.Raw),
+                            ApplicationOrder: applicationOrder++));
                         break;
 
                     case "MultiPlanet":
@@ -176,49 +332,94 @@ public static class AdofaiTimingResolver
                             action.EventType,
                             floorStartTimes[floorIndex],
                             Provenance(action, floorIndex),
-                            RawData: RawText(action.Raw)));
+                            RawData: RawText(action.Raw),
+                            ApplicationOrder: applicationOrder++));
                         break;
 
                     case "Pause":
-                        stateDurationBeats += ReadDouble(action.Raw, "duration").GetValueOrDefault();
-                        gameplayChanges.Add(new GameplayStateChange(
-                            GameplayStateChangeKind.Pause,
-                            action.EventType,
-                            floorStartTimes[floorIndex],
-                            Provenance(action, floorIndex),
-                            DurationBeats: ReadDouble(action.Raw, "duration"),
-                            RawData: RawText(action.Raw)));
+                        var pauseRawDuration = ReadDouble(action.Raw, "duration");
+                        var pauseProvenance = Provenance(action, floorIndex);
+                        if (!IsUsableDurationBeats(pauseRawDuration))
+                        {
+                            diagnostics.Add(new Diagnostic(
+                                DiagnosticSeverity.Error,
+                                AdofaiDurationValueCode,
+                                $"Pause.duration must be a finite non-negative number of beats; received '{pauseRawDuration?.ToString(CultureInfo.InvariantCulture) ?? "<missing>"}'.",
+                                pauseProvenance));
+                            gameplayChanges.Add(new GameplayStateChange(
+                                GameplayStateChangeKind.Pause,
+                                action.EventType,
+                                floorStartTimes[floorIndex],
+                                pauseProvenance,
+                                RawData: RawText(action.Raw),
+                                Application: GameplayStateChangeApplication.Rejected));
+                        }
+                        else
+                        {
+                            pendingPauses.Add(new PauseCandidate(
+                                action,
+                                pauseProvenance,
+                                pauseRawDuration!.Value));
+                            hasPendingPause = true;
+                        }
+
                         break;
 
                     case "FreeRoam":
+                        var freeRoamDuration = ReadDouble(action.Raw, "duration");
+                        var freeRoamProvenance = Provenance(action, floorIndex);
+                        var freeRoamRejected = !IsUsableDurationBeats(freeRoamDuration);
+                        if (freeRoamRejected)
+                        {
+                            // FreeRoam does not advance floor time today, but a
+                            // non-finite/negative duration must still not enter
+                            // canonical gameplay state as if it were a real value.
+                            ReportIllegalDuration(diagnostics, action.EventType, action, floorIndex, freeRoamDuration);
+                        }
+
                         gameplayChanges.Add(new GameplayStateChange(
                             GameplayStateChangeKind.FreeRoam,
                             action.EventType,
                             floorStartTimes[floorIndex],
-                            Provenance(action, floorIndex),
-                            DurationBeats: ReadDouble(action.Raw, "duration"),
-                            RawData: RawText(action.Raw)));
+                            freeRoamProvenance,
+                            DurationBeats: freeRoamRejected ? null : freeRoamDuration,
+                            RawData: RawText(action.Raw),
+                            ApplicationOrder: applicationOrder++,
+                            Application: freeRoamRejected
+                                ? GameplayStateChangeApplication.Rejected
+                                : GameplayStateChangeApplication.Applied));
                         diagnostics.Add(new Diagnostic(
                             DiagnosticSeverity.Warning,
                             "ADF-FREEROAM-UNKNOWN",
                             "FreeRoam is preserved as gameplay state but its game-time rule is not promoted to VERIFIED.",
-                            Provenance(action, floorIndex)));
+                            freeRoamProvenance));
                         break;
 
                     case "Hold":
                         var holdDuration = ReadDouble(action.Raw, "duration");
+                        var holdProvenance = Provenance(action, floorIndex);
+                        var holdRejected = !IsUsableDurationBeats(holdDuration);
+                        if (holdRejected)
+                        {
+                            ReportIllegalDuration(diagnostics, action.EventType, action, floorIndex, holdDuration);
+                        }
+
                         gameplayChanges.Add(new GameplayStateChange(
                             GameplayStateChangeKind.Hold,
                             action.EventType,
                             floorStartTimes[floorIndex],
-                            Provenance(action, floorIndex),
-                            DurationBeats: holdDuration,
-                            RawData: RawText(action.Raw)));
+                            holdProvenance,
+                            DurationBeats: holdRejected ? null : holdDuration,
+                            RawData: RawText(action.Raw),
+                            ApplicationOrder: applicationOrder++,
+                            Application: holdRejected
+                                ? GameplayStateChangeApplication.Rejected
+                                : GameplayStateChangeApplication.Applied));
                         diagnostics.Add(new Diagnostic(
                             DiagnosticSeverity.Warning,
                             "ADF-HOLD-INFERRED",
                             "ADOFAI Hold.duration is retained as beats for the semantic model; its exact game timing remains externally inferred.",
-                            Provenance(action, floorIndex)));
+                            holdProvenance));
                         break;
 
                     case "Multitap":
@@ -227,7 +428,8 @@ public static class AdofaiTimingResolver
                             action.EventType,
                             floorStartTimes[floorIndex],
                             Provenance(action, floorIndex),
-                            RawData: RawText(action.Raw)));
+                            RawData: RawText(action.Raw),
+                            ApplicationOrder: applicationOrder++));
                         diagnostics.Add(new Diagnostic(
                             DiagnosticSeverity.Warning,
                             "ADF-MULTITAP-UNKNOWN",
@@ -261,7 +463,8 @@ public static class AdofaiTimingResolver
                             action.EventType,
                             floorStartTimes[floorIndex],
                             Provenance(action, floorIndex),
-                            RawData: RawText(action.Raw)));
+                            RawData: RawText(action.Raw),
+                            ApplicationOrder: applicationOrder++));
                         diagnostics.Add(new Diagnostic(
                             DiagnosticSeverity.Warning,
                             AdofaiUnclassifiedActionCode,
@@ -280,25 +483,55 @@ public static class AdofaiTimingResolver
                 floorStartTimes[floorIndex],
                 currentBpm,
                 floorAngleDegrees,
+                applicationOrder,
                 tempoEvents,
                 tempoSegments,
                 diagnostics);
             currentBpm = timing.EndBpm;
+            applicationOrder = timing.EndApplicationOrder;
 
-            if (stateDurationBeats > 0)
+            if (hasPendingPause)
+            {
+                // The Pause delay is now validated against the canonical
+                // floor-end tempo and the accumulated seconds. The candidates
+                // are appended to GameplayState.Changes here - after every
+                // non-Pause action of the floor - so the list keeps the same
+                // same-floor source order the single source-ordered pass would
+                // have produced; the application ordinal is then stamped in
+                // that same source order.
+                pauseSeconds = RejectNonCanonicalPauses(
+                    pendingPauses,
+                    pauseSeconds,
+                    timing.EndBpm,
+                    timing.DurationSeconds,
+                    floorStartTimes[floorIndex],
+                    gameplayChanges,
+                    diagnostics);
+                var firstPauseIndex = gameplayChanges.Count - pendingPauses.Count;
+                for (var pauseIndex = 0; pauseIndex < pendingPauses.Count; pauseIndex++)
+                {
+                    gameplayChanges[firstPauseIndex + pauseIndex] =
+                        gameplayChanges[firstPauseIndex + pauseIndex]
+                        with { ApplicationOrder = applicationOrder++ };
+                }
+            }
+
+            if (hasPendingPause && pauseSeconds > 0)
             {
                 diagnostics.Add(new Diagnostic(
                     DiagnosticSeverity.Warning,
                     "ADF-PAUSE-INFERRED",
                     "Pause.duration was included as beats using the public reference implementation convention; validate against game behavior before treating it as VERIFIED.",
-                    floorActions.FirstOrDefault(action => action.EventType == "Pause") is { } pause
-                        ? Provenance(pause, floorIndex)
-                        : null));
+                    pendingPauses.FirstOrDefault()?.Provenance));
             }
 
             var hold = floorActions.FirstOrDefault(action => action.EventType == "Hold");
             var inputKind = hold is null ? InputEventKind.Tap : InputEventKind.Hold;
-            var holdBeats = hold is null || hold.Raw is null ? null : ReadDouble(hold.Raw.Value, "duration");
+            // An illegal Hold duration must be canonical-empty on the input
+            // event too: the same value that was rejected from the gameplay
+            // state may not reappear as an applied DurationBeats here.
+            var holdDurationRaw = hold?.Raw is { } holdRaw ? ReadDouble(holdRaw, "duration") : null;
+            var holdBeats = IsUsableDurationBeats(holdDurationRaw) ? holdDurationRaw : null;
             var direction = floorIndex < document.Directions.Count
                 ? document.Directions[floorIndex]
                 : null;
@@ -319,12 +552,48 @@ public static class AdofaiTimingResolver
                 DurationBeats: holdBeats,
                 RawData: direction?.Token));
 
-            var floorDuration = timing.DurationSeconds
-                                + stateDurationBeats * 60.0 / Math.Max(currentBpm, 1e-12);
+            var floorDuration = timing.DurationSeconds + pauseSeconds;
             if (floorIndex + 1 < floorStartTimes.Length)
             {
                 floorStartTimes[floorIndex + 1] = floorStartTimes[floorIndex] + floorDuration;
             }
+        }
+
+        // Final canonical time invariant. Every floor start, every input time,
+        // every gameplay-state time and every tempo segment boundary must stay
+        // finite, and adjacent floors must not move backwards. A violation here
+        // can only mean an unguarded numeric path slipped through validation;
+        // it is reported explicitly instead of silently handing non-finite
+        // times to every downstream stage.
+        for (var floorIndex = 0; floorIndex < floorStartTimes.Length; floorIndex++)
+        {
+            if (!double.IsFinite(floorStartTimes[floorIndex]))
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Error,
+                    AdofaiDurationValueCode,
+                    $"Floor {floorIndex} resolved to a non-finite start time; the canonical time axis is not usable."));
+            }
+            else if (floorIndex > 0 && floorStartTimes[floorIndex] < floorStartTimes[floorIndex - 1])
+            {
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Error,
+                    AdofaiDurationValueCode,
+                    $"Floor {floorIndex} start time moved backwards relative to floor {floorIndex - 1}; the canonical time axis is not monotonic."));
+            }
+        }
+
+        if (inputEvents.Any(inputEvent => !double.IsFinite(inputEvent.TimeSeconds))
+            || gameplayChanges.Any(change => !double.IsFinite(change.TimeSeconds))
+            || tempoSegments.Any(segment =>
+                !double.IsFinite(segment.StartTimeSeconds)
+                || !double.IsFinite(segment.EndTimeSeconds)
+                || segment.EndTimeSeconds < segment.StartTimeSeconds))
+        {
+            diagnostics.Add(new Diagnostic(
+                DiagnosticSeverity.Error,
+                AdofaiDurationValueCode,
+                "At least one canonical derived event has a non-finite or backwards time; the canonical time axis is not usable."));
         }
 
         // Every semantic track over real time is ordered by (TimeSeconds,
@@ -389,6 +658,7 @@ public static class AdofaiTimingResolver
         double floorStartTime,
         double initialBpm,
         double floorAngleDegrees,
+        int applicationOrder,
         ICollection<TempoEvent> tempoEvents,
         ICollection<TempoSegment> tempoSegments,
         ICollection<Diagnostic> diagnostics)
@@ -401,12 +671,25 @@ public static class AdofaiTimingResolver
         var offsets = new List<double> { 0 };
         foreach (var action in speedActions)
         {
-            var offset = ReadDouble(action.Raw, "angleOffset").GetValueOrDefault();
-            if (offset < 0 || offset > floorAngleDegrees)
+            var rawOffset = ReadDouble(action.Raw, "angleOffset");
+            var offset = rawOffset.GetValueOrDefault();
+            if (!double.IsFinite(offset))
+            {
+                // A non-finite angleOffset is a malformed source value, not an
+                // in-span boundary. It is diagnosed as illegal and placed at
+                // the floor start so the geometry unit mapping stays defined.
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Error,
+                    AdofaiSpeedOffsetCode,
+                    $"SetSpeed angleOffset must be finite; received '{rawOffset?.ToString(CultureInfo.InvariantCulture) ?? "<missing>"}'. The event is retained but treated as a floor-start boundary.",
+                    Provenance(action, floorIndex)));
+                offset = 0;
+            }
+            else if (offset < 0 || offset > floorAngleDegrees)
             {
                 diagnostics.Add(new Diagnostic(
                     DiagnosticSeverity.Warning,
-                    "ADF-SPEED-OFFSET",
+                    AdofaiSpeedOffsetCode,
                     $"SetSpeed angleOffset {offset} is outside the resolved floor span {floorAngleDegrees}; it is clamped for timing while the raw event is retained.",
                     Provenance(action, floorIndex)));
                 offset = Math.Clamp(offset, 0, floorAngleDegrees);
@@ -427,7 +710,7 @@ public static class AdofaiTimingResolver
         {
             if (offset > previousOffset)
             {
-                var segmentDuration = (offset - previousOffset) / 180.0 * 60.0 / Math.Max(currentBpm, 1e-12);
+                var segmentDuration = (offset - previousOffset) / 180.0 * 60.0 / currentBpm;
                 var segmentStart = floorStartTime + elapsed;
                 elapsed += segmentDuration;
                 tempoSegments.Add(new TempoSegment(
@@ -451,39 +734,81 @@ public static class AdofaiTimingResolver
                 var bpm = ReadDouble(action.Raw, "beatsPerMinute");
                 var multiplier = ReadDouble(action.Raw, "bpmMultiplier");
                 var provenance = Provenance(action, floorIndex);
+
+                // The candidate is validated before anything derived from it
+                // reaches canonical state. A rejected event keeps its raw
+                // record and provenance, exposes canonical-empty numeric
+                // fields and never perturbs BPM, segments or later times.
+                var applied = false;
+                var rejection = (string?)null;
+                var candidateBpm = currentBpm;
+                switch (mode)
+                {
+                    case SetSpeedMode.Bpm when bpm is { } bpmValue && IsUsableTempo(bpmValue):
+                        candidateBpm = bpmValue;
+                        applied = true;
+                        break;
+                    case SetSpeedMode.Bpm:
+                        rejection = "SetSpeed BPM must be finite, positive and small enough that the derived duration stays finite; the previous tempo was retained.";
+                        break;
+                    case SetSpeedMode.Multiplier when multiplier is { } multiplierValue
+                                                        && double.IsFinite(multiplierValue)
+                                                        && multiplierValue > 0:
+                        var product = currentBpm * multiplierValue;
+                        if (IsUsableTempo(product))
+                        {
+                            candidateBpm = product;
+                            applied = true;
+                        }
+                        else
+                        {
+                            rejection = $"SetSpeed multiplier {multiplierValue} would produce a non-finite or underflowed BPM from {currentBpm}; the previous tempo was retained.";
+                        }
+
+                        break;
+                    case SetSpeedMode.Multiplier:
+                        rejection = "SetSpeed multiplier must be a finite positive value; the previous tempo was retained.";
+                        break;
+                    case SetSpeedMode.Unknown:
+                        break;
+                }
+
                 tempoEvents.Add(new TempoEvent(
                     TempoEventKind.AdoFaiSetSpeed,
                     floorStartTime + elapsed,
                     provenance,
-                    Bpm: mode == SetSpeedMode.Bpm ? bpm : null,
+                    // Only an applied event exposes its canonical value; a
+                    // rejected one stays canonical-empty so an illegal value
+                    // cannot masquerade as the effective tempo.
+                    Bpm: applied && mode == SetSpeedMode.Bpm ? candidateBpm : null,
                     SpeedMode: mode,
-                    Multiplier: mode == SetSpeedMode.Multiplier ? multiplier : null,
+                    Multiplier: applied && mode == SetSpeedMode.Multiplier ? multiplier : null,
                     AngleOffsetDegrees: offset,
-                    RawData: RawText(action.Raw)));
+                    RawData: RawText(action.Raw),
+                    Application: applied ? TempoEventApplication.Applied : TempoEventApplication.Rejected,
+                    ApplicationOrder: applicationOrder++));
 
-                switch (mode)
+                if (applied)
                 {
-                    case SetSpeedMode.Bpm when bpm is > 0:
-                        currentBpm = bpm.Value;
-                        break;
-                    case SetSpeedMode.Multiplier when multiplier is > 0:
-                        currentBpm *= multiplier.Value;
-                        break;
-                    case SetSpeedMode.Unknown:
-                        diagnostics.Add(new Diagnostic(
-                            DiagnosticSeverity.Warning,
-                            "ADF-SPEED-TYPE",
-                            $"Unknown SetSpeed.speedType '{modeText}' was preserved but did not alter timing.",
-                            provenance));
-                        break;
-                    default:
-                        diagnostics.Add(new Diagnostic(
-                            DiagnosticSeverity.Error,
-                            "ADF-SPEED-VALUE",
-                            "SetSpeed contained a non-positive or missing BPM/multiplier; the previous tempo was retained.",
-                            provenance));
-                        break;
+                    currentBpm = candidateBpm;
+                    continue;
                 }
+
+                if (mode == SetSpeedMode.Unknown)
+                {
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticSeverity.Warning,
+                        "ADF-SPEED-TYPE",
+                        $"Unknown SetSpeed.speedType '{modeText}' was preserved but did not alter timing.",
+                        provenance));
+                    continue;
+                }
+
+                diagnostics.Add(new Diagnostic(
+                    DiagnosticSeverity.Error,
+                    AdofaiSpeedValueCode,
+                    rejection!,
+                    provenance));
             }
 
             previousOffset = offset;
@@ -492,7 +817,7 @@ public static class AdofaiTimingResolver
         if (floorAngleDegrees > previousOffset)
         {
             var segmentStart = floorStartTime + elapsed;
-            elapsed += (floorAngleDegrees - previousOffset) / 180.0 * 60.0 / Math.Max(currentBpm, 1e-12);
+            elapsed += (floorAngleDegrees - previousOffset) / 180.0 * 60.0 / currentBpm;
             tempoSegments.Add(new TempoSegment(
                 segmentStart,
                 floorStartTime + elapsed,
@@ -501,7 +826,7 @@ public static class AdofaiTimingResolver
                 EndAngleDegrees: floorAngleDegrees));
         }
 
-        return new FloorTiming(elapsed, currentBpm);
+        return new FloorTiming(elapsed, currentBpm, applicationOrder);
     }
 
     private static double GetBaseFloorAngleDegrees(
@@ -604,5 +929,5 @@ public static class AdofaiTimingResolver
         public int PlanetCount { get; set; } = 2;
     }
 
-    private sealed record FloorTiming(double DurationSeconds, double EndBpm);
+    private sealed record FloorTiming(double DurationSeconds, double EndBpm, int EndApplicationOrder);
 }

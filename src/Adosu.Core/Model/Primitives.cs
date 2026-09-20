@@ -129,6 +129,19 @@ public enum SetSpeedMode
     Unknown
 }
 
+/// <summary>
+/// Whether a tempo event was applied to the canonical tempo/time state.
+/// A rejected event stays in the track with its raw source record and stable
+/// diagnostic, but it never alters BPM, segments or subsequent event times.
+/// Its derived numeric fields are canonical-empty (null) so an illegal source
+/// value cannot masquerade as an applied canonical value.
+/// </summary>
+public enum TempoEventApplication
+{
+    Applied,
+    Rejected
+}
+
 public sealed record TempoEvent(
     TempoEventKind Kind,
     double TimeSeconds,
@@ -139,7 +152,9 @@ public sealed record TempoEvent(
     double? AngleOffsetDegrees = null,
     string? OriginalTime = null,
     string? OriginalBeatLength = null,
-    string? RawData = null);
+    string? RawData = null,
+    TempoEventApplication Application = TempoEventApplication.Applied,
+    int ApplicationOrder = -1);
 
 public sealed record TempoSegment(
     double StartTimeSeconds,
@@ -214,6 +229,22 @@ public enum GameplayStateChangeKind
     Unknown
 }
 
+/// <summary>
+/// Whether a gameplay state change carrying an explicit duration was accepted
+/// into the canonical state. A rejected change stays in the track with its raw
+/// source record and a stable diagnostic, but its derived <see cref="GameplayStateChange.DurationBeats"/>
+/// is canonical-empty (null) so an illegal source value cannot masquerade as an
+/// applied canonical value. Only events whose duration is genuinely part of
+/// their semantics (Pause, Hold, FreeRoam) expose this; the default
+/// <see cref="NotApplicable"/> keeps every other change type unchanged.
+/// </summary>
+public enum GameplayStateChangeApplication
+{
+    NotApplicable,
+    Applied,
+    Rejected
+}
+
 public sealed record GameplayStateChange(
     GameplayStateChangeKind Kind,
     string EventType,
@@ -221,24 +252,42 @@ public sealed record GameplayStateChange(
     SourceProvenance Provenance,
     double? DurationBeats = null,
     bool? TwirlStateAfter = null,
-    string? RawData = null);
+    string? RawData = null,
+    int ApplicationOrder = -1,
+    GameplayStateChangeApplication Application = GameplayStateChangeApplication.NotApplicable);
 
 public sealed class GameplayState
 {
     public GameplayState(IEnumerable<GameplayStateChange> changes)
     {
         Changes = changes.ToList();
+        ChangesInApplicationOrder = Changes
+            .OrderBy(change => change.ApplicationOrder)
+            .ThenBy(change => change.TimeSeconds)
+            .ThenBy(change => change.Provenance.SourceIndex)
+            .ToList();
     }
 
+    /// <summary>
+    /// The derived track in its presentation order: real time first, then the
+    /// source index as a stable tie-break. This order is deterministic but is
+    /// presentation only; it is not the order in which stateful events were
+    /// applied to the canonical gameplay state.
+    /// </summary>
     public IReadOnlyList<GameplayStateChange> Changes { get; }
+
+    /// <summary>
+    /// Semantic application order used to replay state. It is ascending by
+    /// floor traversal, then by same-floor source order; it is never derived
+    /// from the presentation list order or from any lossy timestamp grouping.
+    /// </summary>
+    public IReadOnlyList<GameplayStateChange> ChangesInApplicationOrder { get; }
 
     public bool TwirlAt(double timeSeconds)
     {
         var twirl = false;
-        foreach (var change in Changes
-                     .Where(change => change.Kind == GameplayStateChangeKind.Twirl)
-                     .OrderBy(change => change.TimeSeconds)
-                     .ThenBy(change => change.Provenance.SourceIndex))
+        foreach (var change in ChangesInApplicationOrder
+                     .Where(change => change.Kind == GameplayStateChangeKind.Twirl))
         {
             if (change.TimeSeconds > timeSeconds)
             {
