@@ -1,0 +1,19 @@
+# Build output
+bin/
+obj/
+TestResults/
+
+# Local IDE state
+.vs/
+.idea/
+
+# Local Multica/runtime state is workspace metadata, not product source.
+.multica/
+.agent_context/
+
+# User-provided research fixtures are intentionally read-only and never committed.
+.sample/
+
+# Local temporary reports
+*.user
+*.suo
