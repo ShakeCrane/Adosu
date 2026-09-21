@@ -68,6 +68,8 @@ Lead
 - 控制上下文与思考强度
 - 做最终技术判断
 - 判断任务是否完成
+- 指定每轮项目记忆维护负责人，并核实检查结果
+- 确保技术完成后仍完成任务收敛和最终交接
 
 Lead 对最终结果负责。
 
@@ -105,6 +107,8 @@ INFERENCE
 UNKNOWN
 ```
 
+当 Analyst 承担 Architect 职责时，还应判断新发现是否值得持久化，以及旧项目认知是否需要修正。
+
 ### Researcher
 
 负责补充仓库之外的证据，例如：
@@ -137,6 +141,8 @@ UNKNOWN
 - 顺手修改任务外内容
 
 如果实现过程中发现原判断错误，应重新分析，而不是继续堆补丁。
+
+作为 Fast Worker 执行明确的文档维护任务时，可以依据已确认结论更新、去重和整理 `PROJECT_UNDERSTANDING.md`；不得自行将未经确认的推断写成事实。
 
 ### Reviewer
 
@@ -235,6 +241,19 @@ Researcher ─┘
 
 发现旧内容错误或过时时，应直接修正原内容。
 
+### 每轮维护责任
+
+每轮任务必须指定一名实际文档维护负责人；单 Agent 任务由该 Agent 兼任。
+
+- Lead 确保检查发生，并核实检查结果。
+- Architect / 承担该职责的 Analyst 负责判断新认知是否成立、是否有长期价值，以及旧记录是否存在冲突。
+- Fast Worker / Implementer 可以依据已确认结论执行文档编辑。
+- 其他 Agent 在交接时报告值得持久化的发现，不同时争抢文档写入权。
+
+**每轮必须检查，但只有项目理解发生实质变化时才更新。** 无需修改时报告 `NO UPDATE NEEDED`，不得为了留痕机械追加内容。检查应对照实际源码、diff、测试和样本，不能仅凭已有文档自我验证。
+
+文档维护负责人应在结束前向 Lead 报告 `UPDATED / NO UPDATE NEEDED / BLOCKED`；Lead 不得把“计划更新”视为“已经更新”。
+
 原则：
 
 > Preserve current project understanding, not project history.
@@ -268,9 +287,54 @@ NEXT
 
 不要把完整内部思考过程传递给下一个 Agent。
 
+每个 Agent 还应在交接中明确标出具有长期价值、需要进入 `PROJECT_UNDERSTANDING.md` 的发现，或者说明没有此类发现。Lead 负责确认重要输入没有被遗漏，不必重复执行子 Agent 已完成的调查。
+
 ---
 
-## 7. 上下文管理
+## 7. 任务生命周期与收敛
+
+**实现完成不等于任务完成。** Lead 在结束任务前必须通过两个门槛：
+
+- **Gate A — Technical Complete：** 当前验收目标已满足；关键 correctness 验证已执行，或者关键阻塞已明确记录。Build 成功不能替代适用的转换正确性验证。
+- **Gate B — Handoff Complete：** 子 Agent 重要发现已处理；`PROJECT_UNDERSTANDING.md` 已检查并按需更新；剩余问题、下一步及工作树状态已交代清楚。
+
+Gate A 未通过时，继续必要的修复或明确阻塞；Gate A 通过而 Gate B 未通过时，只完成收敛工作，不无理由开启新的调查或扩大范围。
+
+任务级终态只能是：
+
+- `COMPLETE`：当前验收目标和交接均完成。
+- `BLOCKED`：存在无法自行解除的关键阻塞，并已明确所需条件。
+- `PARTIAL`：已完成部分工作，但仍有当前验收目标未完成。
+
+`PASS WITH NON-BLOCKING NOTES` 等 Reviewer 结论只是审查结果，不等于任务终态。已明确归档的非阻塞问题不得导致当前任务无限延长，也不得被隐瞒为已经修复。
+
+最终交接应简要报告：
+
+```text
+STATUS
+COMPLETE / BLOCKED / PARTIAL
+
+COMPLETED
+本轮完成的目标和修改
+
+VALIDATION
+已执行的关键验证及结果
+
+PROJECT UNDERSTANDING
+UPDATED / NO UPDATE NEEDED / BLOCKED
+
+REMAINING
+剩余问题、严重性及处理状态
+
+NEXT
+明确下一步
+```
+
+任何未执行的测试、未完成的文档更新或未确认的结论，都不得声称已经完成。
+
+---
+
+## 8. 上下文管理
 
 所有 Agent 都应主动控制上下文规模。
 
@@ -303,7 +367,7 @@ NEXT
 
 ---
 
-## 8. 思考强度
+## 9. 思考强度
 
 思考深度应与任务难度匹配。
 
@@ -336,7 +400,7 @@ NEXT
 
 ---
 
-## 9. 成本与任务分配
+## 10. 成本与任务分配
 
 具体模型、供应商和价格可能变化，因此不在本文写死。
 
@@ -366,7 +430,7 @@ NEXT
 
 ---
 
-## 10. 中断恢复
+## 11. 中断恢复
 
 任务中断后：
 
@@ -388,7 +452,7 @@ PROJECT_UNDERSTANDING.md
 
 ---
 
-## 11. 提交说明规范
+## 12. 提交说明规范
 
 项目提交说明采用 Conventional Commits 风格。
 
@@ -458,9 +522,9 @@ Refs: #123
 
 ---
 
-## 12. 完成条件
+## 13. 完成条件
 
-Lead 在任务结束前至少确认：
+Lead 在任务结束前至少确认两个完成门槛；若存在未满足条件，应使用 `BLOCKED` 或 `PARTIAL`，不得伪称 `COMPLETE`。
 
 ```text
 [ ] 用户目标已满足
@@ -469,14 +533,18 @@ Lead 在任务结束前至少确认：
 [ ] 已完成与风险匹配的验证
 [ ] 没有已知 correctness blocker
 [ ] 工作树状态明确
+[ ] 已指定文档维护负责人，并核实 UPDATED / NO UPDATE NEEDED / BLOCKED
+[ ] 所有子 Agent 的重要发现已处理
 [ ] 新的重要项目认知已按需更新 PROJECT_UNDERSTANDING.md
+[ ] 非阻塞问题与未完成事项已明确记录
 [ ] 临时资产已按需清理
+[ ] 已给出任务终态、验证结果与下一步
 [ ] 上下文和交接信息已经收敛
 ```
 
 ---
 
-## 13. 核心原则
+## 14. 核心原则
 
 ```text
 Scout       → 找位置
