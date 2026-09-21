@@ -1,24 +1,27 @@
 ﻿# PROJECT_UNDERSTANDING.md
 
-## Current M0-A implementation checkpoint (2026-09-20)
+## Current M0-A implementation checkpoint (2026-09-21)
 
-The repository now has a minimal, dependency-free .NET 10 semantic baseline under `src/Adosu.Core` and an executable regression suite under `tests/Adosu.Tests`. It reads ADOFAI `pathData`/`angleData` plus ordered actions and reads osu!mania timing points and hit objects, preserving source tokens, source indices, decimal timestamps, taps, holds, chords, red tempo points, and green SV points in separate tracks. Thirty-four tests pass against synthetic micro-fixtures and the two supplied real fixtures.
+The repository now has a minimal, dependency-free .NET 10 semantic baseline under `src/Adosu.Core` and an executable regression suite under `tests/Adosu.Tests`. It reads ADOFAI `pathData`/`angleData` plus ordered actions and reads osu!mania timing points and hit objects, preserving source tokens, source indices, decimal timestamps, taps, holds, chords, red tempo points, and green SV points in separate tracks. Thirty-eight regression cases are registered (34 in the preceding local run plus four follow-up cases); the two real-fixture cases use the local ignored `.sample/` corpus. The local Release build and 38/38 test run pass for this revision; no CI result is claimed.
 
-Three semantic contract points plus two P1 correctness fixes and two duration-invariant fixes are now enforced by the resolver and covered by targeted regressions:
+The baseline retains its earlier semantic fixes. Four follow-up cases have been added and pass in the local .NET regression run:
 
 - `GameplayState.Changes` is built in a single source-ordered pass, so mixed action types on the same floor (Twirl, MultiPlanet, Pause, Hold, FreeRoam, Multitap, unknown) never get reordered relative to each other. Every derived event track over real time (`GameplayState.Changes`, `PresentationEvents`, and ADOFAI `TempoTrack.Events`) is ordered by real time then `Provenance.SourceIndex`; no lossy timestamp dictionary is used. This holds across floors too, including a midspin floor crossed by `pathData: "R!"`.
-- **P1 (same-time state order):** presentation order and semantic application order are now separate tracks. `GameplayStateChange.ApplicationOrder` and `TempoEvent.ApplicationOrder` are assigned in floor traversal order, then same-floor source order, and `GameplayState.TwirlAt(t)` / `ChangesInApplicationOrder` replay state in that ordinal, never in the `(TimeSeconds, SourceIndex)` display order. `pathData: "R!!R"` with a `Twirl` on floor 1 (source 1) and floor 2 (source 0) now ends `TwirlAt(1) == false` with `TwirlStateAfter` snapshots consistent with floor traversal, while the display list stays deterministic.
+- **P1 (same-time state order):** presentation order and semantic application order are now separate tracks. `GameplayStateChange.ApplicationOrder` and `TempoEvent.ApplicationOrder` are reserved in floor traversal order, then same-floor source order, including rejected and deferred Pause events, and `GameplayState.TwirlAt(t)` / `ChangesInApplicationOrder` replay state in that ordinal, never in the `(TimeSeconds, SourceIndex)` display order. `pathData: "R!!R"` with a `Twirl` on floor 1 (source 1) and floor 2 (source 0) now ends `TwirlAt(1) == false` with `TwirlStateAfter` snapshots consistent with floor traversal, while the display list stays deterministic.
 - **P1 (SetSpeed illegal input):** `SetSpeed` candidates are validated before touching canonical state. Non-finite, zero, negative and missing `beatsPerMinute`/`bpmMultiplier`, and multiplier products that overflow or underflow the usable BPM range are rejected with the stable `ADF-SPEED-VALUE` error, keep their raw record/provenance, expose canonical-empty `Bpm`/`Multiplier` (`TempoEvent.Application = Rejected`) and never perturb BPM, segments or later event times. The base BPM guard `ADF009` now also rejects a base BPM whose full-floor duration overflows. Non-finite `angleOffset` is reported as an explicit `ADF-SPEED-OFFSET` error rather than a silent out-of-span clamp. The unbacked `Math.Max(bpm, 1e-12)` epsilon clamp is gone; legality is decided by the computed finite/positive duration invariant.
 - **P2 (Pause/Hold/FreeRoam duration invariant):** a present `duration` must be finite and non-negative (`Pause` allows `0`); missing, non-numeric, `1e309`/Infinity and negative values are rejected, never defaulted, clamped or abs-ed. A rejected event keeps its raw JSON and `ApplicationOrder` provenance, carries `GameplayStateChangeApplication.Rejected`, has a canonical-empty `DurationBeats`, and emits the stable `ADF-DURATION-VALUE` error; a rejected `Hold` also leaves `InputEvent.DurationBeats` empty. A legal `Pause` keeps `ADF-PAUSE-INFERRED` and the `INFERRED` (not `VERIFIED`) semantic level. A final canonical time invariant rejects any non-finite floor start or backwards time axis. Underflowed-but-finite segment times remain equal (non-decreasing); no minimum spacing or fabricated gap is introduced.
 - **P2 follow-up (Pause is validated against the canonical floor-end tempo):** `Pause` no longer validates its seconds against the entry BPM that is current when the action is read. Its raw `duration` is checked in the source-ordered pass, then the candidate is committed after `ResolveFloorTempo` with the same `beats * 60 / floor-end BPM` expression that advances the floor. Each candidate is checked as a transaction over the Pauses already accepted on that floor: the accumulated raw beats must stay finite and non-negative, the seconds derived from them must stay finite and non-negative, and the resulting floor end must stay finite. This closes two overflows that the single-Pause entry-BPM check missed: two individually representable Pauses whose accumulated beats overflow the beat-to-second step (for example two `2e306` Pauses at base BPM `1e307`), and a legal `SetSpeed` that lowers the floor-end tempo far enough that a huge-but-individually-finite Pause becomes unrepresentable in seconds. Only the offending Pause is rejected, with its own raw record, provenance, original `TimeSeconds` and application ordinal; the accepted Pauses, `Twirl`, `MultiPlanet`, `SetSpeed` and the application order are preserved. The returned accepted seconds are reused verbatim for the floor advance, so no second expression can reintroduce the overflow.
 - ADOFAI actions are split into an explicit presentation VFX whitelist (`MoveCamera`, `MoveTrack`, `MoveDecorations`, `AddDecoration`, `SetFilter`, `RecolorTrack`, `CustomBackground`, `SetPlanetRotation`, `Bloom`, `SetHitsound`, `PositionTrack`, `Flash`) versus modeled gameplay/timing state. Any action that is neither is retained as `GameplayStateChangeKind.Unknown` with its raw provenance and emits a stable `ADF-ACTION-UNCLASSIFIED` warning; it is never silently treated as removable VFX.
 - An action whose `floor` is null, negative, or beyond the resolved floor range, and any non-object entry in `actions[]`, is never silently dropped: it stays a source record and becomes an explicit unknown gameplay state with a stable `ADF-FLOOR-RANGE` warning. A missing floor keeps a `null` provenance floor index and is never disguised as `-1`.
 
+- **Follow-up (accumulated travel):** individually finite floor spans may overflow when accumulated. The resolver fails closed with a floor-identified `ADF-DURATION-VALUE` `FormatException`, including an overflowing final floor; it neither clamps nor returns an Infinity-filled chart. Exceptional input cannot preserve a partially valid canonical chart.
+- **Follow-up (Pause provenance):** `ADF-PAUSE-INFERRED` identifies the first accepted Pause contributing positive duration. `ApplicationOrder` retains source ordering; nonzero-angle-offset SetSpeed remains governed by its resolved timing boundary.
+
 This is still M0-A: there is no writer or complete converter. ADOFAI Hold/Pause/FreeRoam/MultiPlanet/Multitap edge semantics, full pathData version coverage, and exact `!`/999 game timing remain explicitly `UNKNOWN` or externally inferred. Do not treat the current reader as a claim that those mechanisms are losslessly convertible.
 
 > adosu! 项目共享理解
-> 更新时间：2026-09-17
-> 状态：已完成本地仓库 / Git / `.sample/` 基线核对。
+> 更新时间：2026-09-21
+> 状态：M0-A correctness hardening follow-up；父 Issue 维持 `in_review`，M0-B 尚未正式启动。
 > 本文件反映当前可验证事实；规划中的模块与转换语义仍多为 TARGET / UNKNOWN。
 
 ---
@@ -56,43 +59,23 @@ correctness
 
 ---
 
-## 2. 当前仓库基线（2026-09-20 核实）
+## 2. 当前仓库基线（2026-09-21 核实）
 
 本节为 **CONFIRMED** 仓库事实。
 
 ### Git
 
 ```text
-branch:     main
-HEAD:       60830e23746675932243f47dc152145d5161433c
-message:    Initial commit
-remote:     origin  https://github.com/ShakeCrane/Adosu
-tracking:   main...origin/main
+branch: main
+remote: https://github.com/ShakeCrane/Adosu
+reviewed parent: 0f0c9c0 (2026-09-21 follow-up)
 ```
 
-已跟踪文件只有 `LICENSE`（MIT，Copyright 2026 ShakeCrane）。
-
-工作树 **不干净**。未跟踪：
-
-```text
-.gitignore
-AGENTS.md
-TEAM.md
-PROJECT_UNDERSTANDING.md
-Adosu.sln
-src/
-tests/
-docs/
-.opencode/
-quick-create-description.md
-.sample/          # 整个研究语料目录
-```
-
-没有其他 commit / branch / tag。
+HEAD and local working-tree status are dynamic: check them at task start. `.sample/` remains ignored read-only user material. The tracked tree now includes the solution, Core, tests and research docs; no writer, full converter or CI has been committed.
 
 ### 已存在的实现资产
 
-当前工作区 **存在** 一个最小、无依赖的 .NET 10 语义基线与可执行回归套件：
+当前 `main` 已跟踪一个最小、无依赖的 .NET 10 语义基线与可执行回归套件：
 
 ```text
 Adosu.sln
@@ -109,14 +92,14 @@ tests/Adosu.Tests/Program.cs
 因此：
 
 - 存在 ADOFAI / osu!mania Reader 与语义/时间解析的最小实现
-- 存在 31 个可执行回归测试（合成 micro-fixture + 2 个真实 fixture）
+- 注册 38 个可执行回归测试（其中 2 个依赖本地 `.sample/`）
 - 不存在 Writer / 完整 Converter / CLI / UI / CI
 - 规划中的完整 `Adosu.Core` 模块树（`IO` / `Convert` / `Packaging` 等）仍是 TARGET
 
 ### 文档
 
-- `TEAM.md`：未跟踪；定义多 Agent 协作原则。有效。
-- `PROJECT_UNDERSTANDING.md`：本文件，已按当前实现与测试事实修正。
+- `TEAM.md`：已跟踪，定义多 Agent 协作原则。
+- `PROJECT_UNDERSTANDING.md`：本文件，记录当前实现与剩余 UNKNOWN。
 - `docs/research/sample-corpus-index.md`：派生索引，不是 `.sample/` 原文件。
 - `docs/research/m0-a-baseline.md`：M0-A 语义/时间基线记录，含 VERIFIED / INFERRED / UNKNOWN。
 
@@ -159,7 +142,7 @@ ADOFAI → osu!mania
 
 反向 `osu!mania → ADOFAI` 已纳入整体架构，但不应在当前阶段抢跑。
 
-当前已在 `src/Adosu.Core` 落地 Reader 与语义/时间解析的最小基线（ADOFAI 与 osu!mania 双侧），并由 31 个回归测试覆盖；Writer / 转换器 / UI 仍未开始，也在当前阶段范围之外。
+当前双侧 Reader 与语义/时间解析最小基线注册 38 个回归案例（2 个依赖本地 fixture）；Writer / 转换器 / UI 仍未开始，父 Issue 保持 `in_review`。
 
 ---
 
@@ -693,7 +676,7 @@ diff review
 build / unit test
 ```
 
-当前已有 **31 个可执行回归测试**（`tests/Adosu.Tests`，合成 micro-fixture + 2 个真实 fixture）。在 M0 证据不足处，实现以“保留 raw/source provenance + 稳定 diagnostic + 明确 UNKNOWN”处理，而不是静默丢弃或用特殊分支掩盖。
+当前注册 **38 个可执行回归测试**（`tests/Adosu.Tests`，其中 2 个依赖本地 `.sample/`）。在 M0 证据不足处，实现以“保留 raw/source provenance + 稳定 diagnostic + 明确 UNKNOWN”处理，而不是静默丢弃或用特殊分支掩盖。
 
 对于通过 `.sample` 暴露的问题：
 
@@ -784,7 +767,7 @@ build / unit test
 
 `TEAM.md` 定义角色。模型供应商分配是规划，不是仓库事实，价格不写入技术结论。
 
-本轮预定小队因成员工具白名单不可用未能启动；基线由单 Agent 按 Architect / Implementer / Reviewer 职责顺序完成，并在文末留下独立审查结论。
+Agent 执行和本地验证以各次实际运行记录为准；本文件不保留过期的小队启动状态。
 
 原则不变：
 

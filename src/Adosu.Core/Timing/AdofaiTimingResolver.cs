@@ -58,7 +58,8 @@ public static class AdofaiTimingResolver
     private sealed record PauseCandidate(
         AdofaiAction Action,
         SourceProvenance Provenance,
-        double DurationBeats);
+        double DurationBeats,
+        int ApplicationOrder);
 
     /// <summary>
     /// Validates and commits the still-uncommitted Pause candidates of one
@@ -81,10 +82,12 @@ public static class AdofaiTimingResolver
         double floorTravelSeconds,
         double floorStartTime,
         ICollection<GameplayStateChange> gameplayChanges,
-        ICollection<Diagnostic> diagnostics)
+        ICollection<Diagnostic> diagnostics,
+        out SourceProvenance? firstContributingPause)
     {
         var acceptedBeats = 0d;
         var acceptedSeconds = pauseSeconds;
+        firstContributingPause = null;
         foreach (var candidate in pending)
         {
             var candidateBeats = acceptedBeats + candidate.DurationBeats;
@@ -116,6 +119,10 @@ public static class AdofaiTimingResolver
             {
                 acceptedBeats = candidateBeats;
                 acceptedSeconds = acceptedBeats * 60.0 / floorEndBpm;
+                if (candidate.DurationBeats > 0 && firstContributingPause is null)
+                {
+                    firstContributingPause = candidate.Provenance;
+                }
             }
 
             gameplayChanges.Add(new GameplayStateChange(
@@ -125,6 +132,7 @@ public static class AdofaiTimingResolver
                 candidate.Provenance,
                 DurationBeats: rejection is null ? candidate.DurationBeats : null,
                 RawData: RawText(candidate.Action.Raw),
+                ApplicationOrder: candidate.ApplicationOrder,
                 Application: rejection is null
                     ? GameplayStateChangeApplication.Applied
                     : GameplayStateChangeApplication.Rejected));
@@ -291,16 +299,19 @@ public static class AdofaiTimingResolver
                 .Where(action => action.FloorIndex == floorIndex)
                 .OrderBy(action => action.SourceIndex)
                 .ToList();
+            // Reserve ordinals before deferred Pause/SetSpeed resolution, so
+            // acceptance or rejection cannot reorder source actions.
+            var applicationOrders = floorActions.ToDictionary(
+                action => action.SourceIndex,
+                _ => applicationOrder++);
 
             // Every gameplay-state action is classified in one source-ordered
             // pass. Geometry-changing state (Twirl, MultiPlanet) is applied
             // here as well, so multiple action types on the same floor can
             // never be reordered relative to each other in GameplayState.
             //
-            // Pause needs the floor's canonical end tempo, which is only known
-            // after ResolveFloorTempo. Its duration is therefore validated raw
-            // here, deferred, and committed in source order below with the same
-            // floor-end BPM and the same expression that advances the floor.
+            // Pause is checked raw here, then committed at floor-end tempo while
+            // retaining its source ordinal reserved above.
             var pendingPauses = new List<PauseCandidate>();
             var pauseSeconds = 0d;
             var hasPendingPause = false;
@@ -317,7 +328,7 @@ public static class AdofaiTimingResolver
                             Provenance(action, floorIndex),
                             TwirlStateAfter: twirl,
                             RawData: RawText(action.Raw),
-                            ApplicationOrder: applicationOrder++));
+                            ApplicationOrder: applicationOrders[action.SourceIndex]));
                         break;
 
                     case "MultiPlanet":
@@ -333,7 +344,7 @@ public static class AdofaiTimingResolver
                             floorStartTimes[floorIndex],
                             Provenance(action, floorIndex),
                             RawData: RawText(action.Raw),
-                            ApplicationOrder: applicationOrder++));
+                            ApplicationOrder: applicationOrders[action.SourceIndex]));
                         break;
 
                     case "Pause":
@@ -352,6 +363,7 @@ public static class AdofaiTimingResolver
                                 floorStartTimes[floorIndex],
                                 pauseProvenance,
                                 RawData: RawText(action.Raw),
+                                ApplicationOrder: applicationOrders[action.SourceIndex],
                                 Application: GameplayStateChangeApplication.Rejected));
                         }
                         else
@@ -359,7 +371,8 @@ public static class AdofaiTimingResolver
                             pendingPauses.Add(new PauseCandidate(
                                 action,
                                 pauseProvenance,
-                                pauseRawDuration!.Value));
+                                pauseRawDuration!.Value,
+                                applicationOrders[action.SourceIndex]));
                             hasPendingPause = true;
                         }
 
@@ -384,7 +397,7 @@ public static class AdofaiTimingResolver
                             freeRoamProvenance,
                             DurationBeats: freeRoamRejected ? null : freeRoamDuration,
                             RawData: RawText(action.Raw),
-                            ApplicationOrder: applicationOrder++,
+                            ApplicationOrder: applicationOrders[action.SourceIndex],
                             Application: freeRoamRejected
                                 ? GameplayStateChangeApplication.Rejected
                                 : GameplayStateChangeApplication.Applied));
@@ -411,7 +424,7 @@ public static class AdofaiTimingResolver
                             holdProvenance,
                             DurationBeats: holdRejected ? null : holdDuration,
                             RawData: RawText(action.Raw),
-                            ApplicationOrder: applicationOrder++,
+                            ApplicationOrder: applicationOrders[action.SourceIndex],
                             Application: holdRejected
                                 ? GameplayStateChangeApplication.Rejected
                                 : GameplayStateChangeApplication.Applied));
@@ -429,7 +442,7 @@ public static class AdofaiTimingResolver
                             floorStartTimes[floorIndex],
                             Provenance(action, floorIndex),
                             RawData: RawText(action.Raw),
-                            ApplicationOrder: applicationOrder++));
+                            ApplicationOrder: applicationOrders[action.SourceIndex]));
                         diagnostics.Add(new Diagnostic(
                             DiagnosticSeverity.Warning,
                             "ADF-MULTITAP-UNKNOWN",
@@ -464,7 +477,7 @@ public static class AdofaiTimingResolver
                             floorStartTimes[floorIndex],
                             Provenance(action, floorIndex),
                             RawData: RawText(action.Raw),
-                            ApplicationOrder: applicationOrder++));
+                            ApplicationOrder: applicationOrders[action.SourceIndex]));
                         diagnostics.Add(new Diagnostic(
                             DiagnosticSeverity.Warning,
                             AdofaiUnclassifiedActionCode,
@@ -483,22 +496,23 @@ public static class AdofaiTimingResolver
                 floorStartTimes[floorIndex],
                 currentBpm,
                 floorAngleDegrees,
-                applicationOrder,
+                applicationOrders,
                 tempoEvents,
                 tempoSegments,
                 diagnostics);
             currentBpm = timing.EndBpm;
-            applicationOrder = timing.EndApplicationOrder;
+
+            // Individually finite spans can overflow the cumulative timeline.
+            // Do not return an Infinity-filled canonical chart.
+            if (!double.IsFinite(floorStartTimes[floorIndex] + timing.DurationSeconds))
+            {
+                throw new FormatException(
+                    $"ADF-DURATION-VALUE: accumulated travel through floor {floorIndex} is not a finite time; no canonical chart was produced.");
+            }
 
             if (hasPendingPause)
             {
-                // The Pause delay is now validated against the canonical
-                // floor-end tempo and the accumulated seconds. The candidates
-                // are appended to GameplayState.Changes here - after every
-                // non-Pause action of the floor - so the list keeps the same
-                // same-floor source order the single source-ordered pass would
-                // have produced; the application ordinal is then stamped in
-                // that same source order.
+                // Commit against floor-end tempo, retaining pre-reserved ordinals.
                 pauseSeconds = RejectNonCanonicalPauses(
                     pendingPauses,
                     pauseSeconds,
@@ -506,23 +520,16 @@ public static class AdofaiTimingResolver
                     timing.DurationSeconds,
                     floorStartTimes[floorIndex],
                     gameplayChanges,
-                    diagnostics);
-                var firstPauseIndex = gameplayChanges.Count - pendingPauses.Count;
-                for (var pauseIndex = 0; pauseIndex < pendingPauses.Count; pauseIndex++)
+                    diagnostics,
+                    out var firstContributingPause);
+                if (firstContributingPause is not null)
                 {
-                    gameplayChanges[firstPauseIndex + pauseIndex] =
-                        gameplayChanges[firstPauseIndex + pauseIndex]
-                        with { ApplicationOrder = applicationOrder++ };
+                    diagnostics.Add(new Diagnostic(
+                        DiagnosticSeverity.Warning,
+                        "ADF-PAUSE-INFERRED",
+                        "Pause.duration was included as beats using the public reference implementation convention; validate against game behavior before treating it as VERIFIED.",
+                        firstContributingPause));
                 }
-            }
-
-            if (hasPendingPause && pauseSeconds > 0)
-            {
-                diagnostics.Add(new Diagnostic(
-                    DiagnosticSeverity.Warning,
-                    "ADF-PAUSE-INFERRED",
-                    "Pause.duration was included as beats using the public reference implementation convention; validate against game behavior before treating it as VERIFIED.",
-                    pendingPauses.FirstOrDefault()?.Provenance));
             }
 
             var hold = floorActions.FirstOrDefault(action => action.EventType == "Hold");
@@ -553,9 +560,15 @@ public static class AdofaiTimingResolver
                 RawData: direction?.Token));
 
             var floorDuration = timing.DurationSeconds + pauseSeconds;
+            var floorEndTime = floorStartTimes[floorIndex] + floorDuration;
+            if (!double.IsFinite(floorEndTime))
+            {
+                throw new FormatException(
+                    $"ADF-DURATION-VALUE: accumulated duration through floor {floorIndex} is not a finite time; no canonical chart was produced.");
+            }
             if (floorIndex + 1 < floorStartTimes.Length)
             {
-                floorStartTimes[floorIndex + 1] = floorStartTimes[floorIndex] + floorDuration;
+                floorStartTimes[floorIndex + 1] = floorEndTime;
             }
         }
 
@@ -658,7 +671,7 @@ public static class AdofaiTimingResolver
         double floorStartTime,
         double initialBpm,
         double floorAngleDegrees,
-        int applicationOrder,
+        IReadOnlyDictionary<int, int> applicationOrders,
         ICollection<TempoEvent> tempoEvents,
         ICollection<TempoSegment> tempoSegments,
         ICollection<Diagnostic> diagnostics)
@@ -786,7 +799,7 @@ public static class AdofaiTimingResolver
                     AngleOffsetDegrees: offset,
                     RawData: RawText(action.Raw),
                     Application: applied ? TempoEventApplication.Applied : TempoEventApplication.Rejected,
-                    ApplicationOrder: applicationOrder++));
+                    ApplicationOrder: applicationOrders[action.SourceIndex]));
 
                 if (applied)
                 {
@@ -826,7 +839,7 @@ public static class AdofaiTimingResolver
                 EndAngleDegrees: floorAngleDegrees));
         }
 
-        return new FloorTiming(elapsed, currentBpm, applicationOrder);
+        return new FloorTiming(elapsed, currentBpm);
     }
 
     private static double GetBaseFloorAngleDegrees(
@@ -929,5 +942,5 @@ public static class AdofaiTimingResolver
         public int PlanetCount { get; set; } = 2;
     }
 
-    private sealed record FloorTiming(double DurationSeconds, double EndBpm, int EndApplicationOrder);
+    private sealed record FloorTiming(double DurationSeconds, double EndBpm);
 }

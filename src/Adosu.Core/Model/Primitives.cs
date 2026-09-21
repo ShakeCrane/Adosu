@@ -277,9 +277,9 @@ public sealed class GameplayState
     public IReadOnlyList<GameplayStateChange> Changes { get; }
 
     /// <summary>
-    /// Semantic application order used to replay state. It is ascending by
-    /// floor traversal, then by same-floor source order; it is never derived
-    /// from the presentation list order or from any lossy timestamp grouping.
+    /// Source-application order: floor traversal, then same-floor source order,
+    /// including rejected or deferred Pauses. Angle-offset SetSpeed still takes
+    /// effect at its resolved timing boundary, not at this ordinal's floor start.
     /// </summary>
     public IReadOnlyList<GameplayStateChange> ChangesInApplicationOrder { get; }
 

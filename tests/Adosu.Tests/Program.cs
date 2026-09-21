@@ -39,6 +39,10 @@ internal static class TestRunner
         ("ADOFAI FreeRoam duration legality and canonical-empty rejection", FreeRoamDurationLegality),
         ("ADOFAI illegal Pause leaves Twirl and SetSpeed consistent", IllegalPauseKeepsLaterState),
         ("ADOFAI underflowed segment times stay finite, ordered and non-decreasing", UnderflowSegmentPrecisionLimitation),
+        ("ADOFAI Pause, state and tempo preserve source application order", PauseSourceApplicationOrder),
+        ("ADOFAI rejected Pauses retain reserved source ordinals", RejectedPauseSourceApplicationOrder),
+        ("ADOFAI inferred Pause provenance identifies accepted contribution", PauseInferredDiagnosticProvenance),
+        ("ADOFAI cumulative floor travel overflow fails closed", CumulativeFloorTravelOverflow),
         ("osu!mania lanes, taps, LN, chords and separate SV", ManiaMicroFixture),
         ("source decimal precision and same-timestamp order", PrecisionAndOrdering),
         ("real ADOFAI fixture regression statistics", RealAdoFaiFixture),
@@ -1141,8 +1145,9 @@ internal static class TestRunner
 
         Assert.True(pause.ApplicationOrder >= 0 && twirl.ApplicationOrder >= 0,
             "both the rejected Pause and the applied Twirl keep a real application ordinal");
-        Assert.True(pause.ApplicationOrder > twirl.ApplicationOrder,
-            "within the floor, the Pause is stamped after the earlier-source Twirl");
+        Assert.True(pause.ApplicationOrder < twirl.ApplicationOrder
+                    && twirl.ApplicationOrder < speed.ApplicationOrder,
+            "Pause, Twirl and SetSpeed must retain source order after deferred Pause rejection");
         Assert.True(chart.GameplayState.ChangesInApplicationOrder
             .Zip(chart.GameplayState.ChangesInApplicationOrder.Skip(1),
                 (first, second) => first.ApplicationOrder < second.ApplicationOrder)
@@ -1333,6 +1338,114 @@ internal static class TestRunner
             "underflowed times may be equal but may never move backwards");
         Assert.True(chart.Diagnostics.All(diagnostic => diagnostic.Code != "ADF-DURATION-VALUE"),
             "a finite non-decreasing underflow must not be reported as an illegal duration");
+    }
+
+    private static void PauseSourceApplicationOrder()
+    {
+        var chart = AdofaiReader.Parse("""
+            {
+              "pathData": "RR",
+              "settings": { "bpm": 60, "offset": 0 },
+              "actions": [
+                { "floor": 0, "eventType": "Pause", "duration": 1 },
+                { "floor": 0, "eventType": "Twirl" },
+                { "floor": 0, "eventType": "SetSpeed", "speedType": "Bpm", "beatsPerMinute": 120 },
+                { "floor": 0, "eventType": "Hold", "duration": 1 }
+              ]
+            }
+            """);
+        var bySource = chart.GameplayState.Changes
+            .Concat(chart.TempoTrack.Events.Select(speed => new GameplayStateChange(
+                GameplayStateChangeKind.Unknown, "SetSpeed", speed.TimeSeconds,
+                speed.Provenance, ApplicationOrder: speed.ApplicationOrder)))
+            .OrderBy(change => change.Provenance.SourceIndex).ToList();
+        Assert.Equal(new[] { 0, 1, 2, 3 }, bySource.Select(change => change.ApplicationOrder));
+        Assert.Equal(new[] { 0, 1, 3 }, chart.GameplayState.ChangesInApplicationOrder
+            .Select(change => change.Provenance.SourceIndex));
+        Assert.Equal(1.0, chart.InputTrack.Events[1].TimeSeconds, 9);
+    }
+
+    private static void RejectedPauseSourceApplicationOrder()
+    {
+        var chart = AdofaiReader.Parse("""
+            {
+              "pathData": "R",
+              "settings": { "bpm": 120, "offset": 0 },
+              "actions": [
+                { "floor": 0, "eventType": "Pause", "duration": 1e309 },
+                { "floor": 0, "eventType": "Twirl" },
+                { "floor": 0, "eventType": "SetSpeed", "speedType": "Bpm", "beatsPerMinute": 1e-300 },
+                { "floor": 0, "eventType": "Pause", "duration": 1e300 }
+              ]
+            }
+            """);
+        var pauses = chart.GameplayState.Changes
+            .Where(change => change.Kind == GameplayStateChangeKind.Pause)
+            .OrderBy(change => change.Provenance.SourceIndex).ToList();
+        Assert.Equal(2, pauses.Count);
+        Assert.True(pauses.All(change => change.Application == GameplayStateChangeApplication.Rejected));
+        Assert.Equal(new[] { 0, 3 }, pauses.Select(change => change.ApplicationOrder));
+        Assert.Equal(new[] { 0, 1, 3 }, chart.GameplayState.ChangesInApplicationOrder
+            .Select(change => change.Provenance.SourceIndex));
+        Assert.Equal(2, chart.TempoTrack.Events.Single().ApplicationOrder);
+        Assert.True(chart.GameplayState.TwirlAt(0));
+        Assert.True(chart.InputTrack.Events.All(input => double.IsFinite(input.TimeSeconds)));
+    }
+
+    private static void PauseInferredDiagnosticProvenance()
+    {
+        // Rejected positive, accepted zero, accepted positive: only the last
+        // Pause actually contributes time and can own the inference warning.
+        var chart = AdofaiReader.Parse("""
+            {
+              "pathData": "R",
+              "settings": { "bpm": 1e-300, "offset": 0 },
+              "actions": [
+                { "floor": 0, "eventType": "Pause", "duration": 1e300 },
+                { "floor": 0, "eventType": "Pause", "duration": 0 },
+                { "floor": 0, "eventType": "Pause", "duration": 1 }
+              ]
+            }
+            """);
+        var pauses = chart.GameplayState.Changes
+            .Where(change => change.Kind == GameplayStateChangeKind.Pause)
+            .OrderBy(change => change.Provenance.SourceIndex).ToList();
+        Assert.Equal(GameplayStateChangeApplication.Rejected, pauses[0].Application);
+        Assert.Equal(GameplayStateChangeApplication.Applied, pauses[1].Application);
+        Assert.Equal(GameplayStateChangeApplication.Applied, pauses[2].Application);
+        Assert.Equal(new[] { 0, 1, 2 }, pauses.Select(change => change.ApplicationOrder));
+        var inferred = chart.Diagnostics.Single(diagnostic => diagnostic.Code == "ADF-PAUSE-INFERRED");
+        Assert.Equal(2, inferred.Provenance!.SourceIndex);
+        Assert.True(chart.Diagnostics.Any(diagnostic =>
+            diagnostic.Code == "ADF-DURATION-VALUE" && diagnostic.Provenance!.SourceIndex == 0));
+    }
+
+    private static void CumulativeFloorTravelOverflow()
+    {
+        // Individually valid floor spans may have an unrepresentable cumulative
+        // endpoint, even when the overflowing floor is the final one.
+        var safe = AdofaiReader.Parse("""
+            { "pathData": "R", "settings": { "bpm": 1e-306, "offset": 0 }, "actions": [] }
+            """);
+        Assert.True(safe.InputTrack.Events.All(input => double.IsFinite(input.TimeSeconds)));
+        Assert.True(safe.TempoTrack.Segments.All(segment =>
+            double.IsFinite(segment.StartTimeSeconds) && double.IsFinite(segment.EndTimeSeconds)));
+        foreach (var path in new[] { "RR", "RRR" })
+        {
+            try
+            {
+                AdofaiReader.Parse($$"""
+                    { "pathData": "{{path}}", "settings": { "bpm": 1e-306, "offset": 0 }, "actions": [] }
+                    """);
+                throw new InvalidOperationException("a non-finite cumulative time must not produce a chart");
+            }
+            catch (FormatException exception)
+            {
+                Assert.True(exception.Message.Contains("ADF-DURATION-VALUE", StringComparison.Ordinal)
+                            && exception.Message.Contains("floor", StringComparison.Ordinal),
+                    "fail-closed timing must identify the invalid floor and stable code");
+            }
+        }
     }
 
     private static void ManiaMicroFixture()
