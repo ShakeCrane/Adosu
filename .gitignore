@@ -17,3 +17,8 @@ TestResults/
 # Local temporary reports
 *.user
 *.suo
+
+# Local agent/task process files; do not commit these with the project.
+AGENTS.md
+description.md
+quick-create-description.md
