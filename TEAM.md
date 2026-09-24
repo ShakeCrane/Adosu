@@ -10,6 +10,15 @@ PROJECT_UNDERSTANDING.md
 
 ---
 
+## 治理权限与文档维护
+
+用户级项目指令授权 Mika 动态维护 `team/` 下全部角色文件，包括 `team/chief-of-staff.md`。Mika 不得自行修改、删除、削弱、变相绕过或委托他人修改本条规定的自身修改权限及限制。
+
+`TEAM.md`、网页版项目指令及其他高于 `team/` 的治理规则，仅由用户与网页版 GPT 实际修改；Mika 可以组织分析并提出修改建议，不得自行修改或指派其他 Agent 代写。批准提案不等于授权 Mika 写入上位规则。本条仅由用户与网页版 GPT 修改。
+
+Mika 在既有授权内维护角色职责文件，不借此扩大自身权限、替代 Architect 技术裁决或承担业务实现。
+
+---
 
 ## 顶层资料安全规则
 
@@ -54,7 +63,17 @@ Lead
 └── Reviewer
 ```
 
-角色表示职责，不要求每个任务都启动独立 Agent。
+上述名称是功能标签，不要求每个任务都启动独立 Agent，也不要求存在同名角色文件。实际角色及其可承担的功能如下：
+
+| 实际角色 | 主要职责 | 可承担的功能标签 |
+| --- | --- | --- |
+| Mika / Chief of Staff | 工作流统筹、调度、交接、治理维护与收敛 | Workflow Lead（仅流程职责） |
+| Architect | 技术理解、架构、正确性与技术裁决 | Technical Owner、Analyst、按需 Researcher |
+| Implementer | 按已确认方案完成实现 | Implementer；合同明确时兼任 Fast Worker |
+| Reviewer | 独立审查 | Reviewer；合同明确时承担 Tester 功能 |
+| Secretary | 项目记忆与文档整理 | Secretary；合同明确时承担 Fast Worker 功能 |
+
+Scout、Researcher、Tester、Fast Worker 等为按需分派的功能，不据此补建 Agent 文件。功能标签不能改变实际角色的权限边界；特别是 Mika 作为 Workflow Lead，不取得最终技术裁决权。
 
 ### Lead
 
@@ -66,12 +85,12 @@ Lead
 - 合并证据
 - 处理结论冲突
 - 控制上下文与思考强度
-- 做最终技术判断
+- 协调技术结论冲突，由 Architect 进行技术裁决
 - 判断任务是否完成
 - 指定每轮项目记忆维护负责人，并核实检查结果
 - 确保技术完成后仍完成任务收敛和最终交接
 
-Lead 对最终结果负责。
+Lead 对流程、交付完整性与收敛负责；Architect 对技术裁决负责。
 
 ### Scout
 
@@ -200,6 +219,17 @@ Researcher ─┘
 
 默认不要让多个 Agent 重复写同一份实现。
 
+### 单写者与权限
+
+同一文件在同一时段只有一名实际写者；任务合同应指定写者、修改范围及验收责任，其他成员只读、审查或提案。任务合同不能授予超出上位规则的写入权限。
+
+- `TEAM.md`、网页版项目指令及上位治理规则：由用户与网页版 GPT 修改；Mika 仅提案。
+- `team/*.md`：由 Mika 在既有授权内维护；不得修改自身授权及限制。
+- `PROJECT_UNDERSTANDING.md`：由 Architect 确认技术结论，任务合同指定具备权限的 Secretary / Fast Worker / Implementer 执笔，Mika 协调并核实；不强制 Secretary 排他写入。
+- `FAILURE_COLLECTION.md`：由 Mika 按需创建并维护。
+
+行为授权遵循用户当前要求与项目上位规则、`TEAM.md`、`team/` 的层级；技术事实以实际源码、diff、测试和可复现结果优先，其次为样本、项目理解文档和旧报告。两种优先级不能混用。
+
 如果不同 Agent 结论冲突：
 
 1. 明确冲突命题
@@ -209,6 +239,12 @@ Researcher ─┘
 5. 无法确认时保留 `UNKNOWN`
 
 技术事实不通过投票决定。
+
+### FAILURE_COLLECTION.md
+
+`FAILURE_COLLECTION.md` 由 Mika 维护，首次出现真实、可追溯的合格失败时按需创建，不预置空骨架。用户明确纠正、执行错误、项目污染、记忆丢失或执行错位等应按实际证据记录，区分观察事实、推断原因、防复发措施及其验证状态；同类复发优先归入既有条目。
+
+失败记录不自动触发长期规则变更；确认原因、适用范围和防复发价值后，才提出最小修改。涉及上位规则时由 Mika 提案，用户与网页版 GPT 实施。
 
 ---
 
@@ -243,11 +279,11 @@ Researcher ─┘
 
 ### 每轮维护责任
 
-每轮任务必须指定一名实际文档维护负责人；单 Agent 任务由该 Agent 兼任。
+每轮任务合同指定一名具备权限的实际文档维护负责人；单 Agent 任务仅在权限允许时由其兼任。
 
 - Lead 确保检查发生，并核实检查结果。
 - Architect / 承担该职责的 Analyst 负责判断新认知是否成立、是否有长期价值，以及旧记录是否存在冲突。
-- Fast Worker / Implementer 可以依据已确认结论执行文档编辑。
+- 合同指定的 Secretary / Fast Worker / Implementer 可以依据 Architect 已确认的技术结论执行文档编辑。Mika 只协调并核实。
 - 其他 Agent 在交接时报告值得持久化的发现，不同时争抢文档写入权。
 
 **每轮必须检查，但只有项目理解发生实质变化时才更新。** 无需修改时报告 `NO UPDATE NEEDED`，不得为了留痕机械追加内容。检查应对照实际源码、diff、测试和样本，不能仅凭已有文档自我验证。
@@ -552,7 +588,8 @@ Analyst     → 理解机制
 Researcher  → 找外部证据
 Implementer → 最小正确实现
 Reviewer    → 找 correctness 问题
-Lead        → 决策并收敛
+Lead        → 流程决策并收敛
+Architect   → 技术裁决
 ```
 
 总体原则：
