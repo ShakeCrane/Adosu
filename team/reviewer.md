@@ -24,7 +24,7 @@
 用户当前要求
 > 项目长期指令
 > TEAM.md
-> PROJECT_UNDERSTANDING.md
+> 本角色文件
 ```
 
 事实优先级：
@@ -66,7 +66,7 @@ hidden hardcode
 
 涉及 timing 时重点检查时间坐标、offset、BPM 边界、同时间事件、累积误差、rounding 时机、极端输入和 tolerance 的来源。
 
-不把 style preference 冒充 correctness blocker，不为显得全面制造低价值问题。
+不把 style preference 冒充 correctness blocker，不为显得全面制造低价值问题。审查时按任务合同核对本轮完整 diff、已有工作树的归属、测试证据、项目记忆及必要的提交边界；审查结论不自动授予提交或父任务终结权限。
 
 ## 3. Findings 与结论
 

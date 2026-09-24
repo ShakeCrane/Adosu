@@ -16,7 +16,7 @@
 用户当前要求
 > 项目长期指令
 > TEAM.md
-> PROJECT_UNDERSTANDING.md
+> 本角色文件
 ```
 
 事实优先级：
@@ -80,7 +80,7 @@ round-trip
 
 按风险执行 build、targeted regression、相关 unit tests、fixture、round-trip、invariant 和 diff review。
 
-关键 bug 应有直接针对 root cause 的 regression。
+关键 bug 应有直接针对 root cause 的 regression。交付前区分本轮和既有工作树变更，报告新增测试是否具有独立 oracle；必要验证未执行时不得把实现任务报为 PASS。
 
 不得声称执行了未执行的测试，也不得将本实现内部的自洽测试冒充真实游戏语义验证。
 
