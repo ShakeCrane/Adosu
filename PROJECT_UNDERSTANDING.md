@@ -21,7 +21,7 @@ This is still M0-A: there is no writer or complete converter. ADOFAI Hold/Pause/
 
 > adosu! 项目共享理解
 > 更新时间：2026-09-21
-> 状态：M0-A correctness hardening follow-up；父 Issue 维持 `in_review`，M0-B 尚未正式启动。
+> 状态：M0-A correctness hardening follow-up 已交付；M0-B 尚未正式启动。
 > 本文件反映当前可验证事实；规划中的模块与转换语义仍多为 TARGET / UNKNOWN。
 
 ---
@@ -142,7 +142,7 @@ ADOFAI → osu!mania
 
 反向 `osu!mania → ADOFAI` 已纳入整体架构，但不应在当前阶段抢跑。
 
-当前双侧 Reader 与语义/时间解析最小基线注册 38 个回归案例（2 个依赖本地 fixture）；Writer / 转换器 / UI 仍未开始，父 Issue 保持 `in_review`。
+当前双侧 Reader 与语义/时间解析最小基线注册 38 个回归案例（2 个依赖本地 fixture）；Writer / 转换器 / UI 仍未开始。
 
 ---
 
