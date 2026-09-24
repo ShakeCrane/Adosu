@@ -2,7 +2,7 @@
 
 ## Current M0-A implementation checkpoint (2026-09-21)
 
-The repository now has a minimal, dependency-free .NET 10 semantic baseline under `src/Adosu.Core` and an executable regression suite under `tests/Adosu.Tests`. It reads ADOFAI `pathData`/`angleData` plus ordered actions and reads osu!mania timing points and hit objects, preserving source tokens, source indices, decimal timestamps, taps, holds, chords, red tempo points, and green SV points in separate tracks. Thirty-eight regression cases are registered (34 in the preceding local run plus four follow-up cases); the two real-fixture cases use the local ignored `.sample/` corpus. The local Release build and 38/38 test run pass for this revision; no CI result is claimed.
+The repository now has a minimal, dependency-free .NET 10 semantic baseline under `src/Adosu.Core` and an executable regression suite under `tests/Adosu.Tests`. It reads ADOFAI `pathData`/`angleData` plus ordered actions and reads osu!mania timing points and hit objects, preserving source tokens, source indices, decimal timestamps, taps, holds, chords, red tempo points, and green SV points in separate tracks. Thirty-eight regression cases are registered (34 in the preceding local run plus four follow-up cases); the two real-fixture cases use the local ignored `.sample/` corpus. The 2026-09-21 local Release build and 38/38 test run were reported as passing for this revision; this document-only reconciliation did not rerun tests or verify CI.
 
 The baseline retains its earlier semantic fixes. Four follow-up cases have been added and pass in the local .NET regression run:
 
@@ -20,8 +20,8 @@ The baseline retains its earlier semantic fixes. Four follow-up cases have been 
 This is still M0-A: there is no writer or complete converter. ADOFAI Hold/Pause/FreeRoam/MultiPlanet/Multitap edge semantics, full pathData version coverage, and exact `!`/999 game timing remain explicitly `UNKNOWN` or externally inferred. Do not treat the current reader as a claim that those mechanisms are losslessly convertible.
 
 > adosu! 项目共享理解
-> 更新时间：2026-09-21
-> 状态：M0-A correctness hardening follow-up 已交付；M0-B 尚未正式启动。
+> 更新时间：2026-09-25（远端文档核对；非本地工作树验证）
+> 状态：仓库已提交 M0-A correctness hardening；M0-B 的任务平台启动状态未由本次 GitHub 核对确认。
 > 本文件反映当前可验证事实；规划中的模块与转换语义仍多为 TARGET / UNKNOWN。
 
 ---
@@ -59,7 +59,7 @@ correctness
 
 ---
 
-## 2. 当前仓库基线（2026-09-21 核实）
+## 2. 已提交实现基线（2026-09-25 远端核对）
 
 本节为 **CONFIRMED** 仓库事实。
 
@@ -68,7 +68,7 @@ correctness
 ```text
 branch: main
 remote: https://github.com/ShakeCrane/Adosu
-reviewed parent: 0f0c9c0 (2026-09-21 follow-up)
+timing implementation baseline: 206013e (2026-09-21; includes 0f0c9c0 fixes)
 ```
 
 HEAD and local working-tree status are dynamic: check them at task start. `.sample/` remains ignored read-only user material. The tracked tree now includes the solution, Core, tests and research docs; no writer, full converter or CI has been committed.
@@ -357,12 +357,12 @@ pathData 字符 → 绝对角度 / midspin（!）映射
 
 理由：
 
-- 它是时间轴的几何输入；没有它无法对当前唯一 ADOFAI 样本建立 tile 拍数。
+- 它是时间轴的几何输入；Reader 已有带 INFERRED 标记的候选映射，但缺少独立证据，不能据此确认真实游戏的 tile 拍数语义。
 - 当前样本是 `version 2` + 纯 `pathData` + 8 个 `!`，正好卡在旧格式路径上。
 - 社区对照表存在，但不是官方源码，证据等级最高只能到 SUPPORTED_HYPOTHESIS。
 - 需要：官方或反编译许可之外的一手资料、多个 `pathData`/`angleData` 对照样本、以及 `!` 是否消耗时间的独立证据。
 
-当前基线已经实现该映射的候选版本，并把它标记为 INFERRED / SUPPORTED_HYPOTHESIS，配合显式 diagnostic 与 targeted regression；在拿到一手证据前，不得升级为 CONFIRMED，也不得据此固化最终转换语义。
+当前基线已经实现该映射的候选版本，并把它标记为 INFERRED / SUPPORTED_HYPOTHESIS，配合显式 diagnostic 与 targeted regression。近期 SetSpeed / Pause / event-ordering 修复验证的是项目实现的不变量，并未独立证明这一映射或其他真实游戏语义；在拿到一手证据前，不得升级为 CONFIRMED，也不得据此固化最终转换语义。
 
 ---
 
@@ -454,7 +454,7 @@ local path（如下载）
 
 未知 `.exe` / `.dll` / `.bat` / `.ps1` 等默认不得自动执行。
 
-**禁止**把 `.sample/`、游戏文件、用户参考文件、反编译结果上传到外部服务。本轮未上传。
+**联网研究只允许获取公开资料到本地；未经用户明确授权和相应权利许可，不得把 `.sample/`、游戏文件、反编译结果、参考文件或其他受限制素材上传到任何外部服务。** 查询和交接也不得泄露可重构的受限制内容。
 
 ---
 
@@ -821,13 +821,13 @@ web_search
 
 ## 21. 下一步
 
-基线已建立。下一轮正式 M0 调研应：
+M0-A 的 Reader / timing hardening 已有代码与回归基线，M0-B 的任务平台状态需另行核实。下一步仍应优先解决真实游戏语义的证据缺口，而非重复已落地的实现修复：
 
 1. 调查 `pathData → angle` / `!` midspin 的一手证据（官方或可验证对照样本）。
 2. 在不修改 `.sample/` 的前提下，如用户授权，补充 `angleData`、Hold、Pause、非 v2、非 4K 样本。
 3. 将候选 timing 语义与 `docs/research/m0-a-baseline.md` 中的 VERIFIED / INFERRED / UNKNOWN 对齐，形成 research note + minimal fixture；新增实现必须带 targeted regression 与显式 diagnostic。
 4. Reviewer 独立检查证据强度。
-5. 只有证据足够后，才把它在 `docs/research` 中升级为 CONFIRMED，并据此实现对应 Core 转换逻辑。
+5. 只有证据足够后，才把相应语义在 `docs/research` 中升级为 CONFIRMED；否则保留 INFERRED / UNKNOWN，不把现有 Reader 与 timing 回归自洽当作真实游戏行为的证明。
 
 ---
 
