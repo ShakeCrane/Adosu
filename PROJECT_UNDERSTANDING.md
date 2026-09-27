@@ -20,8 +20,8 @@ The baseline retains its earlier semantic fixes. Four follow-up cases have been 
 This is still M0-A: there is no writer or complete converter. ADOFAI Hold/Pause/FreeRoam/MultiPlanet/Multitap edge semantics, full pathData version coverage, and exact `!`/999 game timing remain explicitly `UNKNOWN` or externally inferred. Do not treat the current reader as a claim that those mechanisms are losslessly convertible.
 
 > adosu! 项目共享理解
-> 更新时间：2026-09-25（远端文档核对；非本地工作树验证）
-> 状态：仓库已提交 M0-A correctness hardening；M0-B 的任务平台启动状态未由本次 GitHub 核对确认。
+> 更新时间：2026-09-27（AS-50 validation/oracle 集成检查点）
+> 状态：当前集成检查点包含可复用的 synthetic validation/oracle 基础设施；它检查声明的内部合同，不证明真实游戏行为，也不表示任一转换方向已就绪。
 > 本文件反映当前可验证事实；规划中的模块与转换语义仍多为 TARGET / UNKNOWN。
 
 ---
@@ -92,7 +92,7 @@ tests/Adosu.Tests/Program.cs
 因此：
 
 - 存在 ADOFAI / osu!mania Reader 与语义/时间解析的最小实现
-- 注册 38 个可执行回归测试（其中 2 个依赖本地 `.sample/`）
+- 本节记录的是 2026-09-25 远端核对时的历史测试基线：38 个 Reader/语义回归测试，其中 2 个依赖本地 `.sample/`
 - 不存在 Writer / 完整 Converter / CLI / UI / CI
 - 规划中的完整 `Adosu.Core` 模块树（`IO` / `Convert` / `Packaging` 等）仍是 TARGET
 
@@ -116,6 +116,14 @@ tests/Adosu.Tests/Program.cs
 - “不要在该问题确认前实现 TimeResolver” → 已被 M0-A 基线实现取代；当前策略是“实现 + 明确 UNKNOWN + 显式 diagnostic”，而不是阻塞实现。
 
 ---
+
+### Validation/oracle 基础设施检查点（2026-09-27）
+
+当前集成检查点新增 43 个 validation-only synthetic 测试；连同 38 个既有测试，全量 runner 共 81 个测试。全量 runner 中 2 个既有测试读取本地 `.sample/` fixture；`--synthetic-only` 只构造并运行这 43 个合成测试，不注册或读取那两个 sample-backed 测试。
+
+基础设施可复用地检查 source/target identity 与 inventory、mapping scope 与 topology、已声明的 decimal interval 与 numeric policy、note kind、同一时间组的 size 与 ordinal、application order 中是否包含 base source、application ordering、timing-point ordinal、evidence gate，以及稳定 diagnostics。Expected 值必须有独立来源及记录的 provenance；加载器只能检查声明的 provenance，不能证明 expected 确实独立于 Adosu 输出。
+
+Synthetic self-consistency 不是 gameplay oracle。目前没有真实、独立 expected chart，也没有 Converter；ADOFAI → osu!mania 与 osu!mania → ADOFAI 两个方向均为 **NOT READY**。
 
 ## 3. 当前阶段
 
@@ -142,7 +150,7 @@ ADOFAI → osu!mania
 
 反向 `osu!mania → ADOFAI` 已纳入整体架构，但不应在当前阶段抢跑。
 
-当前双侧 Reader 与语义/时间解析最小基线注册 38 个回归案例（2 个依赖本地 fixture）；Writer / 转换器 / UI 仍未开始。
+当前测试总数为 81 个：38 个既有 Reader/语义案例与 43 个 validation-only synthetic 案例；其中 2 个既有案例依赖本地 `.sample/` fixture。Writer / 完整转换器 / UI 仍未开始。
 
 ---
 
@@ -676,7 +684,7 @@ diff review
 build / unit test
 ```
 
-当前注册 **38 个可执行回归测试**（`tests/Adosu.Tests`，其中 2 个依赖本地 `.sample/`）。在 M0 证据不足处，实现以“保留 raw/source provenance + 稳定 diagnostic + 明确 UNKNOWN”处理，而不是静默丢弃或用特殊分支掩盖。
+当前注册 **81 个可执行测试**（`tests/Adosu.Tests`：38 个既有 Reader/语义案例 + 43 个 validation-only synthetic 案例；全量运行时 2 个既有案例依赖本地 `.sample/`）。`--synthetic-only` 仅构造并运行 43 个 validation-only 案例，不注册或读取 sample-backed 测试。在 M0 证据不足处，实现以“保留 raw/source provenance + 稳定 diagnostic + 明确 UNKNOWN”处理，而不是静默丢弃或用特殊分支掩盖。
 
 对于通过 `.sample` 暴露的问题：
 
