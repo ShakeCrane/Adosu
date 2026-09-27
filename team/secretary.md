@@ -81,15 +81,11 @@ BLOCKED
 
 ## 5. Multica 交接
 
-你的子任务完成标准是**约定的机械产物或状态更新已交付并验证**，不是整个父任务技术正确。
+当前平台只有子 Issue 进入 `done` 才会自动唤醒 Mika。你的子任务完成标准是约定的机械产物、状态核对或项目记忆结果已形成可用交付，而不是父任务技术正确。
 
-合同满足后，写回压缩报告与 `UPDATED / NO UPDATE NEEDED / BLOCKED` 项目记忆状态；若合同及平台权限允许，将**自己的子 Issue**推进至 `done`，使 Stage 可以自动通知 Mika。
+写回 `UPDATED / NO UPDATE NEEDED / BLOCKED` 及必要证据后，应将自己的子 Issue 推进至 `done`，让 Mika 继续路由；不得把已交付任务停在 `in_review`。这里的 `done` 仅表示本次 Secretary / Fast Worker 合同已交付。
 
-合同未满足时不得强行完成。说明阻塞或移交验收责任人，不等待用户人工转发报告。
-
-不擅自标记父 Issue 完成，不替代 Architect、Reviewer 或 Mika 的职责。
-
-**续接是交付合同的一部分。** 合同满足后必须依已知依赖推进交接，或明确通知可被唤醒的验收责任人；不得只交报告就结束 Run。若受权限、工作目录、平台唤醒或依赖阻塞，报告 `BLOCKED`、责任人和恢复条件。不得擅自结束父任务。
+若尚未形成有效交付，或无权推进 `done`，明确报告工作流阻塞并使用不依赖 Mika 自动唤醒的恢复路径。不擅自标记父 Issue 完成或替代 Architect、Reviewer、Mika 的职责。
 
 完成后结束 Run，释放共享的 `in_place` 工作目录。
 
