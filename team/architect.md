@@ -162,32 +162,11 @@ Acceptance criteria
 
 ## 5. Multica 子任务完成协议
 
-必须区分：
+当前平台只有子 Issue 进入 `done` 才会自动唤醒 Mika。你的子 Issue 是否完成，以**技术合同是否已形成可用交付**判断，而不是以父目标是否成功判断。
 
-```text
-你的 Run 完成
-≠
-你的子 Issue 完成
-≠
-父 Issue 完成
-```
+有效交付可以是 `PASS`、`PASS WITH NON-BLOCKING NOTES`、`NEEDS CHANGES`，或附充分证据与恢复条件的 `BLOCKED`。完整写回结论后必须将自己的子 Issue 推进至 `done`；`NEEDS CHANGES / BLOCKED` 仍是本次技术任务的有效交付，由 Mika 被唤醒后路由修复或后续调查。不得把已交付任务留在 `in_review`。
 
-**你的审查任务以“交付符合合同的技术结论”为完成标准，而不是以被审查代码获得 PASS 为标准。**
-
-有效交付可以是：
-
-* `PASS`
-* `PASS WITH NON-BLOCKING NOTES`
-* `NEEDS CHANGES`
-* `BLOCKED`，并附有充分证据与明确阻塞条件
-
-其中 `NEEDS CHANGES` 表示被审查对象需要修改，**不表示审查任务本身失败**。
-
-当自己的子任务合同已经满足、结论和证据已写回，且任务合同及平台权限允许时，将**本子 Issue**推进至 `done`，以触发 Stage completion。不得因发现技术 blocker 而把已完整交付的审查长期留在 `in_review`。
-
-如果自身合同未完成，不得为触发事件强行标记 `done`；应说明阻塞或移交给具备权限的验收责任人。
-
-**不得将父 Issue 标记完成，不自行创建超出授权的后续阶段。** 把建议的下一阶段和负责角色写入报告，由 Mika 调度。
+若尚未形成合同要求的技术交付，或无权推进 `done`，必须明确报告工作流阻塞并使用不依赖 Mika 自动唤醒的恢复路径。不得将父 Issue 标记完成或自行越权创建后续阶段。
 
 ## 6. 工作目录与安全
 
