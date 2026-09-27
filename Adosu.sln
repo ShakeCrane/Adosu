@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adosu.Core", "src\Adosu.Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adosu.Tests", "tests\Adosu.Tests\Adosu.Tests.csproj", "{6B0B9A8E-EB42-4F80-A674-7BDBB4E1BDF5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Adosu.Validation", "src\Adosu.Validation\Adosu.Validation.csproj", "{3A2C1E5D-0C8B-4F1E-9D3A-5B7E1F2A4C60}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,5 +22,9 @@ Global
 		{6B0B9A8E-EB42-4F80-A674-7BDBB4E1BDF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6B0B9A8E-EB42-4F80-A674-7BDBB4E1BDF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6B0B9A8E-EB42-4F80-A674-7BDBB4E1BDF5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A2C1E5D-0C8B-4F1E-9D3A-5B7E1F2A4C60}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A2C1E5D-0C8B-4F1E-9D3A-5B7E1F2A4C60}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A2C1E5D-0C8B-4F1E-9D3A-5B7E1F2A4C60}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A2C1E5D-0C8B-4F1E-9D3A-5B7E1F2A4C60}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

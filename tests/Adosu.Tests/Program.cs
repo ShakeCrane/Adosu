@@ -3,11 +3,11 @@ using Adosu.Core.Model;
 using Adosu.Core.Parsing;
 using Adosu.Core.Timing;
 
-return TestRunner.Run();
+return TestRunner.Run(args);
 
 internal static class TestRunner
 {
-    private static readonly (string Name, Action Test)[] Tests =
+    private static (string Name, Action Test)[] CreateTests() =>
     [
         ("ADOFAI path mapping, SetSpeed and state preservation", AdoFaiMicroFixture),
         ("ADOFAI angleData keeps explicit 999 midspin", AdoFaiAngleDataMidspin),
@@ -46,13 +46,20 @@ internal static class TestRunner
         ("osu!mania lanes, taps, LN, chords and separate SV", ManiaMicroFixture),
         ("source decimal precision and same-timestamp order", PrecisionAndOrdering),
         ("real ADOFAI fixture regression statistics", RealAdoFaiFixture),
-        ("real osu!mania SV fixture regression statistics", RealManiaFixture)
+        ("real osu!mania SV fixture regression statistics", RealManiaFixture),
+        .. FixtureValidationTests.All
     ];
 
-    public static int Run()
+    public static int Run(string[] args)
     {
+        // The synthetic-only invocation runs exclusively the semantic-neutral
+        // fixture validation cases; it never registers RealAdoFaiFixture or
+        // RealManiaFixture and therefore never reads `.sample/`.
+        var syntheticOnly = args.Contains("--synthetic-only", StringComparer.Ordinal);
+        var tests = syntheticOnly ? FixtureValidationTests.All : CreateTests();
+
         var failures = 0;
-        foreach (var (name, test) in Tests)
+        foreach (var (name, test) in tests)
         {
             try
             {
@@ -66,7 +73,12 @@ internal static class TestRunner
             }
         }
 
-        Console.WriteLine($"{Tests.Length - failures}/{Tests.Length} tests passed.");
+        Console.WriteLine($"{tests.Length - failures}/{tests.Length} tests passed.");
+        if (syntheticOnly)
+        {
+            Console.WriteLine("synthetic-only run: .sample/ was not read.");
+        }
+
         return failures == 0 ? 0 : 1;
     }
 
