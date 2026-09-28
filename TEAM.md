@@ -372,7 +372,7 @@ NEXT
 
 长期目标先明确完成条件、当前阶段、依赖、禁区、停止条件及用户保留的决策；Mika 依据真实状态动态拆成最小可验收的 Stage，不为凑流程预建全套角色或固定轮数。
 
-当前平台只在子 Issue 进入 `done` 时自动唤醒 Mika。**需要 Mika 自动续接的子 Issue 禁止使用 `in_review` 作为交付状态；`in_review` 仅保留给 Mika 在父 Issue 已完成内部工作、需要最终外部/用户验收时使用。** 非 Mika Agent 一旦形成合同要求的可用交付，无论结果为 `PASS / NEEDS CHANGES / FAIL / PARTIAL / BLOCKED`，都必须在结束 Run 前显式执行 `multica issue status <当前子 Issue ID> done`，并确认该子 Issue 已为 `done`；不得依赖平台默认状态，也不得主动设置 `in_review`。这里的 `done` 只表示“本子任务交付完成”，不表示父目标成功。需要 review、修复或继续调查时，由被唤醒的 Mika 创建或推进下一 Stage。若命令失败或执行者无权推进 `done`，这是工作流阻塞：不得结束 Run 假装已交接，必须报告具体失败并使用不依赖 Mika 自动唤醒的恢复路径。
+当前平台只在子 Issue 进入 `done` 时自动唤醒 Mika。**需要 Mika 自动续接的子 Issue 禁止使用 `in_review` 作为交付状态；`in_review` 是真实人工 gate，不是父 Issue 的默认收敛状态。** 非 Mika Agent 一旦形成合同要求的可用交付，无论结果为 `PASS / NEEDS CHANGES / FAIL / PARTIAL / BLOCKED`，都必须在结束 Run 前显式执行 `multica issue status <当前子 Issue ID> done`，并确认该子 Issue 已为 `done`；不得依赖平台默认状态，也不得主动设置 `in_review`。这里的 `done` 只表示“本子任务交付完成”，不表示父目标成功。Mika 被唤醒后：总体目标仍有独立、有效、获授权的工作就继续下一 Stage；总体目标与交接条件均已满足且没有人工 gate，就将父 Issue 推进至 `done` 并报告 `COMPLETE`。只有确实需要用户决策、额外授权、不可逆/破坏性操作、用户独有验证/证据，或上位规则明确要求人工审批时，Mika 才可使用 `in_review` 或等价等待用户状态；不得仅因当前 Stage 完成、父 Issue 内部工作收敛或平台建议“ready for review”而停止。若子任务 `done` 命令失败或执行者无权推进，这是工作流阻塞：不得结束 Run 假装已交接，必须报告具体失败并使用不依赖 Mika 自动唤醒的恢复路径。
 
 子任务完成后由平台实际支持的事件唤醒 Mika；Mika 核查成果、工作树、项目记忆和未解决问题，再依据父目标选择修复、下个 Stage、明确阻塞或收敛。只要合同要求继续且仍有独立、有效、获授权的工作，就不因完成一轮研究或遇到局部 UNKNOWN 而提前结束；也不得无依据声称平台能定时或无限持续运行。
 
