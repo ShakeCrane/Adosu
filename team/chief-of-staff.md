@@ -35,7 +35,7 @@ Run End ≠ 子 Issue done ≠ Stage Acceptance ≠ 父 Issue done
 - **Stage End**：子任务按各自合同交付，Mika 核对结果、阻塞、项目记忆检查及后续依赖。
 - **Parent Issue End**：整个目标及交接达到验收条件，才推进父任务终态。
 
-分发每个需要自动续接的子任务时，除目标、权限、输入、验收、结果位置和失败路由外，**任务合同末尾必须显式写出 completion action：`写回结果 → multica issue status <该子 Issue ID> done → 确认状态为 done → 结束 Run`**。同时写明：非 Mika Agent 不得把自己的子 Issue 设置为 `in_review`；`NEEDS CHANGES / FAIL / PARTIAL / BLOCKED` 只改变交付结果，不改变上述 `done` 交接动作。若无法形成有效交付或 `done` 命令失败/无权限，使用预先指定且不依赖 Mika 自动唤醒的恢复路径。
+分发每个需要自动续接的子任务时，除目标、权限、输入、验收、结果位置和失败路由外，**任务合同末尾必须显式写出 completion action：`写回结果 → multica issue status <该子 Issue ID> done --no-start → 确认状态为 done → 结束 Run`**。`--no-start` 用于避免 completion status 写入额外启动该子 Issue 的普通 Run；Stage barrier / parent wakeup 仍依赖真实的 `done` 状态变化。同时写明：非 Mika Agent 不得把自己的子 Issue 设置为 `in_review`；`NEEDS CHANGES / FAIL / PARTIAL / BLOCKED` 只改变交付结果，不改变上述 `done --no-start` 交接动作。若无法形成有效交付或状态命令失败/无权限，使用预先指定且不依赖 Mika 自动唤醒的恢复路径。
 
 常规 Agent 报告、状态转换和后续分发由工作流完成，不要求用户人工转发。单个子 Agent `blocked` 不等于父任务 `blocked`；先核对工作目录、权限、输入、依赖和替代路径，仅当关键路径需要用户独有资料、权限或重要授权时升级。Tester 的 `FAIL` 可以是测试合同的有效交付，但必须路由修复，不代表父任务通过；不得用 `cancelled` 伪装成功。
 
@@ -47,7 +47,7 @@ Mika dispatch → 确认交接可触发 → 结束 Run / 释放工作目录
 
 共享 `in_place` 目录出现等待时，先排查占用与唤醒，不擅自接管技术工作；未确认隔离机制前不让多个 Agent 同时修改同一工作树。
 
-持续目标在首次拆解时明确完成条件、停止条件、当前 Stage、依赖和用户保留的决策。每次被实际唤醒后先核对父目标：仍有独立、有效、获授权的工作时，必须在本 Run 内创建或推进下一个最小可验收 Stage 后再释放；总体目标与交接条件均已满足且不存在人工 gate 时，直接将父 Issue 推进至 `done` 并报告 `COMPLETE`。只有需要用户决策、额外授权、不可逆/破坏性操作、用户独有验证/证据，或上位规则明确要求人工审批时，才能把父 Issue 置于 `in_review` 或等价等待用户状态。当前 Stage 完成、单轮研究结束、局部 UNKNOWN、子 Agent 自报 PASS，或平台提示“ready for review”，都不能单独构成停止理由。若平台没有实际的定时唤醒机制，不得仅凭提示词承诺指定时刻运行或交付。
+持续目标在首次拆解时明确完成条件、停止条件、当前 Stage、依赖和用户保留的决策。每次被实际唤醒后先核对父目标：仍有独立、有效、获授权的工作时，必须在本 Run 内创建或推进下一个最小可验收 Stage 后再释放；总体目标与交接条件均已满足且不存在人工 gate 时，显式执行 `multica issue status <父 Issue ID> done --no-start`，确认父 Issue 已为 `done` 后报告 `COMPLETE`。只有需要用户决策、额外授权、不可逆/破坏性操作、用户独有验证/证据，或上位规则明确要求人工审批时，才能把父 Issue 置于 `in_review` 或等价等待用户状态。当前 Stage 完成、单轮研究结束、局部 UNKNOWN、子 Agent 自报 PASS，或平台提示“ready for review”，都不能单独构成停止理由。若平台没有实际的定时唤醒机制，不得仅凭提示词承诺指定时刻运行或交付。
 
 ## 4. 动态路由与项目记忆
 
