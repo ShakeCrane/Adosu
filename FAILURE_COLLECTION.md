@@ -17,10 +17,10 @@
 
 ## FC-2026-09-27-01 — Worker 以 `in_review` 交付导致 Mika 无法被唤醒
 
-- **状态**：RECORDED / REMEDIATION APPLIED / NOT VERIFIED
-- **触发与日期**：2026-09-27，用户明确报告该停滞仍会发生，并确认当前平台只有子任务进入“已完成”才会唤醒 Mika。
-- **观察到的事实**：Worker 完成工作后将自身任务置为待审核 / `in_review`，任务随后停滞；该状态不会触发 Mika 自动恢复。
-- **原因**：INFERENCE — 既有规则虽要求合同满足后推进 `done`，但仍把“工作结果是否成功”和“Issue 是否完成交付”混在一起，并未把 `in_review` 明确禁止为自主交接状态。
+- **状态**：RECORDED / RECURRED / REMEDIATION REVISED / NOT VERIFIED
+- **触发与复发**：2026-09-27 首次记录；2026-09-28 用户再次确认仍会出现卡在 `in_review` 的情况。当前平台只有子 Issue 进入 `done` 才会自动唤醒 Mika。
+- **观察到的事实**：Worker 已形成交付却将自身子 Issue 置为待审核 / `in_review`，随后 Mika 不会因该状态自动恢复；此前新增“完整交付后推进 `done`”规则后问题仍复发。
+- **原因**：INFERENCE — 上一版修复仍主要依赖 Agent 正确解释状态语义，没有把**显式状态命令及状态确认**写成结束 Run 的硬完成动作。此次复发本身不能证明是 Worker 主动选择还是平台默认行为。
 - **影响**：Stage 失去自动续接信号，需要人工重新唤醒或改状态，破坏持续目标的自主推进。
-- **修复**：将 `done` 明确定义为“本子任务合同已交付”而非父目标成功；`PASS / NEEDS CHANGES / FAIL / PARTIAL / BLOCKED` 在形成完整交付后均以 `done` 唤醒 Mika；review / 修复作为后续 Stage，由 Mika 继续路由；禁止已交付任务停在 `in_review`。
-- **验证状态**：NOT VERIFIED — 需在后续真实多 Stage 任务中确认 PASS 与非 PASS 路径都能在无需用户人工唤醒的情况下续接。
+- **修复**：保留 `done = 本子任务已交付` 语义，并升级为可执行合同：所有需要 Mika 自动续接的非 Mika 子任务在结束 Run 前必须显式执行并确认 `multica issue status <child-id> done`；非 Mika Agent 禁止主动设置子 Issue 为 `in_review`。Mika 仅在父 Issue 内部工作已收敛、等待最终外部/用户验收时使用 `in_review`；每次 dispatch 必须把 completion action 写入任务合同末尾。
+- **验证状态**：NOT VERIFIED — 旧修复已确认复发；新修复需至少在真实 PASS 路径及一次非 PASS（如 `CHANGES REQUIRED / BLOCKED`）路径中验证无需用户人工改状态即可唤醒 Mika 并继续路由。
