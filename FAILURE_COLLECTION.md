@@ -24,3 +24,14 @@
 - **影响**：Stage 失去自动续接信号，需要人工重新唤醒或改状态，破坏持续目标的自主推进。
 - **修复**：保留 `done = 本子任务已交付` 语义，并升级为可执行合同：所有需要 Mika 自动续接的非 Mika 子任务在结束 Run 前必须显式执行并确认 `multica issue status <child-id> done`；非 Mika Agent 禁止主动设置子 Issue 为 `in_review`。Mika 仅在父 Issue 内部工作已收敛、等待最终外部/用户验收时使用 `in_review`；每次 dispatch 必须把 completion action 写入任务合同末尾。
 - **验证状态**：NOT VERIFIED — 旧修复已确认复发；新修复需至少在真实 PASS 路径及一次非 PASS（如 `CHANGES REQUIRED / BLOCKED`）路径中验证无需用户人工改状态即可唤醒 Mika 并继续路由。
+
+## FC-2026-09-28-02 — Mika 将无需人工验收的父任务置为 `in_review`
+
+- **状态**：RECORDED / REMEDIATION APPLIED / NOT VERIFIED
+- **触发任务与日期**：AS-73，2026-09-28。
+- **观察到的事实**：AS-73 已完成拉取合并、评估、验证与建议交付，Mika 随后把父任务置为 `in_review`。用户此前已明确取消常规阶段人工验收，要求 Mika 在无需用户决策或额外授权时自主推进直到当前总体目标完成。
+- **实际错误（FACT）**：在没有报告用户决策、额外授权、不可逆/破坏性操作、用户独有验证或上位规则人工审批需求的情况下，父任务仍进入等待审核状态，造成不必要的人类 gate。
+- **原因**：FACT — 既有 `TEAM.md` / Mika 规则仍允许“父 Issue 内部工作收敛后等待最终用户验收”；INFERENCE — Multica 的 “ready for review” 默认提示进一步强化了该选择，但不能据此断言平台强制要求 `in_review`。
+- **影响**：即使 Worker → Mika 的 `done` 唤醒链路正常，父任务仍可能在 Mika 收敛阶段停住，无法满足“无需逐阶段人工验收、持续推进至目标完成”的工作流目标。
+- **修复**：将 `in_review` 明确定义为真实人工 gate。Mika 在父目标仍有可执行工作时继续下一 Stage；总体目标与交接条件满足且没有人工 gate 时直接将父 Issue 推进至 `done` / `COMPLETE`。仅用户决策、额外授权、不可逆/破坏性操作、用户独有验证/证据或上位规则要求人工审批时允许等待用户。
+- **验证状态**：NOT VERIFIED — 需在后续真实父任务中确认：Stage 完成后仍有工作会自动继续；总体目标完成且无人工 gate 时会直接 `done`，不再停在 `in_review`。
