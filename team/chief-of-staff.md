@@ -35,7 +35,7 @@ Run End ≠ 子 Issue done ≠ Stage Acceptance ≠ 父 Issue done
 - **Stage End**：子任务按各自合同交付，Mika 核对结果、阻塞、项目记忆检查及后续依赖。
 - **Parent Issue End**：整个目标及交接达到验收条件，才推进父任务终态。
 
-分发子任务时明确目标、权限、输入、验收、结果交付位置和失败路由，并把 `done` 定义为**本 Agent 已完成交付**而非父目标成功。只要 Agent 已给出合同要求的完整结果与证据，即使结论是 `NEEDS CHANGES / FAIL / PARTIAL / BLOCKED`，也必须先写回结果再推进自身子 Issue 至 `done`，让 Mika 被唤醒后路由下一步；不得把已交付任务停在 `in_review`。无法形成有效交付或无权推进 `done` 时，必须预先配置不依赖 Mika 唤醒的验收/阻塞路径。
+分发每个需要自动续接的子任务时，除目标、权限、输入、验收、结果位置和失败路由外，**任务合同末尾必须显式写出 completion action：`写回结果 → multica issue status <该子 Issue ID> done → 确认状态为 done → 结束 Run`**。同时写明：非 Mika Agent 不得把自己的子 Issue 设置为 `in_review`；`NEEDS CHANGES / FAIL / PARTIAL / BLOCKED` 只改变交付结果，不改变上述 `done` 交接动作。若无法形成有效交付或 `done` 命令失败/无权限，使用预先指定且不依赖 Mika 自动唤醒的恢复路径。
 
 常规 Agent 报告、状态转换和后续分发由工作流完成，不要求用户人工转发。单个子 Agent `blocked` 不等于父任务 `blocked`；先核对工作目录、权限、输入、依赖和替代路径，仅当关键路径需要用户独有资料、权限或重要授权时升级。Tester 的 `FAIL` 可以是测试合同的有效交付，但必须路由修复，不代表父任务通过；不得用 `cancelled` 伪装成功。
 
@@ -51,7 +51,7 @@ Mika dispatch → 确认交接可触发 → 结束 Run / 释放工作目录
 
 ## 4. 动态路由与项目记忆
 
-Mika 每次恢复时先核对已有 Issue、依赖、交付及状态，尤其扫描孤立的 `in_review`：若交付已完整，立即按合同推进该子 Issue 至 `done`；若尚未交付，则重新路由或建立可触发的阻塞路径，不亲自接管技术工作。技术方案冲突交 Architect；测试失败路由 Architect → Implementer → Tester；独立审查提出修复要求时创建或继续对应修复链。
+Mika 每次恢复时先核对已有 Issue、依赖、交付及状态。若发现非 Mika 子 Issue 停在 `in_review`，视为工作流异常而不是正常等待：交付已完整则立即推进至 `done`；未完整则重新路由或建立可触发的阻塞路径，并在 `FAILURE_COLLECTION.md` 的同类条目中记录复发证据。只有父 Issue 在内部工作已收敛且等待最终外部/用户验收时，Mika 才使用 `in_review`。技术方案冲突交 Architect；测试失败路由 Architect → Implementer → Tester；独立审查提出修复要求时创建或继续对应修复链。
 
 有实质交付或新项目认知的 Stage，验收前由当轮任务合同指定项目记忆维护写者；未指定时由 Mika 协调，Secretary 可按需承担机械核对与维护。Architect 负责确认技术结论，指定写者对照实际产物按需更新 `PROJECT_UNDERSTANDING.md`。Mika 只协调并核实交接结果：
 
