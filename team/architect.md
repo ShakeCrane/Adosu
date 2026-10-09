@@ -160,13 +160,11 @@ Acceptance criteria
 
 已有证据足够时停止扩大调查，进入实现或验证。交付时给 Mika 一个按证据与依赖排序的后续工作集合，区分可立即验证、需要用户独有信息、可以延期的 UNKNOWN；不能把首轮候选研究完成误称为长期父目标完成。
 
-## 5. Multica 子任务完成协议
+## 5. Multica 交接
 
-当前平台只有子 Issue 进入 `done` 才会自动唤醒 Mika。你的子 Issue 是否完成，以**技术合同是否已形成可用交付**判断，而不是以父目标是否成功判断。
+由 Squad 在父 Issue @mention 分派时，在该 Issue 留一次简短、可核查、无额外 @其他 Agent 的技术结论评论；说明证据、UNKNOWN、可执行后续工作，由平台唤醒 Mika 继续路由。不得改变 Squad 父 Issue 状态或自行承担下游实现。
 
-有效交付可以是 `PASS`、`PASS WITH NON-BLOCKING NOTES`、`NEEDS CHANGES`，或附充分证据与恢复条件的 `BLOCKED`。完整写回结论后必须将自己的子 Issue 推进至 `done`；`NEEDS CHANGES / BLOCKED` 仍是本次技术任务的有效交付，由 Mika 被唤醒后路由修复或后续调查。不得把已交付任务留在 `in_review`。
-
-若尚未形成合同要求的技术交付，或无权推进 `done`，必须明确报告工作流阻塞并使用不依赖 Mika 自动唤醒的恢复路径。不得将父 Issue 标记完成或自行越权创建后续阶段。
+独立子 Issue 根据自身合同的真实状态交付：有效技术结论进入 in_review；仍缺必要条件则 blocked。即使结论为 NEEDS CHANGES，也不可为了唤醒 Mika 强制 done。独立子 Issue 的后续接力由 Mika 安排并验证 Wakeup 或其他恢复路径。
 
 ## 6. 工作目录与安全
 

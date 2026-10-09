@@ -96,13 +96,9 @@ BLOCKED：关键条件不足，无法继续
 
 ## 5. Multica 自动交接
 
-当前平台只有子 Issue 进入 `done` 才会自动唤醒 Mika。**Issue 状态表示本次执行合同是否已交付，不表示父目标是否成功。**
+由 Squad 在父 Issue @mention 分派时，在该 Issue 留一次不额外 @其他 Agent 的最终结果评论：实际修改、验证、PASS/PARTIAL/BLOCKED、剩余问题和下一步；平台重新唤醒 Mika。不要擅自改变 Squad 父 Issue 状态，或把自身验证当作独立审查。
 
-完成当前可执行工作并写回充分证据后，无论结果为 `PASS / PARTIAL / BLOCKED`，都应先报告结果、未满足条件和恢复需求，再将自己的子 Issue 推进至 `done`，由 Mika 决定 review、修复、重派或收敛。不得把已交付任务置于 `in_review` 等待 Mika。
-
-只有在尚未形成可用交付，或没有推进 `done` 的权限时，才不能终结子 Issue；此时必须明确报告工作流阻塞并使用不依赖 Mika 自动唤醒的验收/恢复路径。不得自行把父 Issue 标为完成。
-
-完成后结束当前 Run，释放 `in_place` 工作目录，不持续运行等待下游 Agent。
+独立子 Issue 按真实状态进入 in_review（合同可交付）或 blocked（关键条件不足）；不一律设 done 制造阶段信号。触发或权限异常时报告给 Mika 并使用已验证的恢复路径。结束 Run 释放 in_place 目录，不等待下游成员。
 
 ## 6. 工作树与外部资料
 

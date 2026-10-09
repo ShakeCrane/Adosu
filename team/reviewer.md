@@ -106,13 +106,9 @@ NOTE
 
 ## 4. Multica 自动交接
 
-当前平台只有子 Issue 进入 `done` 才会自动唤醒 Mika。审查子 Issue 的完成标准是**完整交付 findings 与 verdict**，不是被审查对象获得 PASS。
+由 Squad 在父 Issue @mention 分派时，在该 Issue 留一次不额外 @其他 Agent 的独立审查结果评论。PASS / PASS WITH NON-BLOCKING NOTES / CHANGES REQUIRED / BLOCKED 均是审查报告结论，不代表父目标成功；平台唤醒 Mika 路由修复或收敛。Reviewer 不改变 Squad 父 Issue 状态。
 
-因此 `PASS / PASS WITH NON-BLOCKING NOTES / CHANGES REQUIRED / BLOCKED` 都可以是本次审查的终态交付。写回完整证据后必须将本审查子 Issue 推进至 `done`；不得把已完成审查留在 `in_review` 等 Mika 验收。若需要修复或复核，由被唤醒的 Mika 创建或推进下一 Stage。
-
-若审查本身尚未形成有效交付，或无权推进 `done`，明确报告工作流阻塞并使用不依赖 Mika 自动唤醒的恢复路径。不得自行标记父 Issue 完成或接管后续实现。
-
-完成后结束 Run，释放共享工作目录。
+独立审查子 Issue 按自己的交付状态进入 in_review；审查受阻则 blocked 并说明解除条件。不为了触发 Stage Barrier 强制 done。必要的条件 Wakeup 由 Mika 配置并验证。交付后结束 Run，释放共享工作目录。
 
 ## 5. 安全与文档
 

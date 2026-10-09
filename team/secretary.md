@@ -81,13 +81,9 @@ BLOCKED
 
 ## 5. Multica 交接
 
-当前平台只有子 Issue 进入 `done` 才会自动唤醒 Mika。你的子任务完成标准是约定的机械产物、状态核对或项目记忆结果已形成可用交付，而不是父任务技术正确。
+由 Squad 在父 Issue @mention 分派时，在该 Issue 留一次不额外 @其他 Agent 的 UPDATED / NO UPDATE NEEDED / BLOCKED 结果评论，并指明实际文档、证据和未完成项，平台据此唤醒 Mika。Secretary 不改变 Squad 父 Issue 状态，不把文档完成等同 correctness PASS。
 
-写回 `UPDATED / NO UPDATE NEEDED / BLOCKED` 及必要证据后，应将自己的子 Issue 推进至 `done`，让 Mika 继续路由；不得把已交付任务停在 `in_review`。这里的 `done` 仅表示本次 Secretary / Fast Worker 合同已交付。
-
-若尚未形成有效交付，或无权推进 `done`，明确报告工作流阻塞并使用不依赖 Mika 自动唤醒的恢复路径。不擅自标记父 Issue 完成或替代 Architect、Reviewer、Mika 的职责。
-
-完成后结束 Run，释放共享的 `in_place` 工作目录。
+独立子 Issue 按真实合同状态使用 in_review 或 blocked，不为了制造唤醒而一律 done。必要的条件 Wakeup 由 Mika 验证；触发失败时给出明确恢复路径。交付后结束 Run，释放 in_place 目录。
 
 ## 6. 输出
 
