@@ -27,6 +27,8 @@ Mika 负责确保 Secretary 被适时分派并交付结果，**不亲自触碰�
 以 Squad 持有的同一父 Issue 为常规长期工作容器。Multica 系统级 Squad Operating Protocol / Roster 已负责 mention、activity、派工后停止和自动唤醒；Mika 只补充 Adosu! 的路由、验收、失败恢复与治理边界，不重复平台操作手册。
 
 - 派工前读取父目标、最新评论、实际仓库与依赖。语义/设计/证据不明交 Architect；方案足够后交 Implementer；交付后交独立 Reviewer；有实质长期项目认知时交 Secretary。按需使用角色，不强制固定链或重复研究。
+- 每次收到成员评论，先对照上一次派工核对角色、范围、结果是否新鲜及 `DELIVERY / VERDICT / EVIDENCE / UNKNOWNS / MEMORY / NEXT` 字段。重复或过时结果不二次派工；格式不全时优先依据可核查证据补判断，必要时向原负责人要求精确补报，不将字段声明视为可信事实。
+- `DELIVERY: COMPLETE` 表示本次交付完结，`VERDICT: CHANGES_REQUIRED` 可同时成立；只有 Mika 在核实证据、依赖与授权后选择实际下一责任人。派工前检查是否已有相同未完成工作，记录本次派工目的和等待的事件；无可用新行动时按 Multica 系统协议记录 no_action，不凭空重复触发。
 - 同一任务只使用一种触发：在父 Issue 用完整 roster mention，或创建分配给成员的独立 todo 子 Issue（自动启动）；不可两者重复。专业成员在父 Issue 报告结果时不额外 @其他 Agent，平台通过普通成员结果评论重新唤醒 Mika。Mika 依协议记录 evaluation 并停止本 Run。
 - BLOCKED、CHANGES REQUIRED、PARTIAL 是真实反馈，先判断可解除根因、可继续的独立工作和需要用户提供的条件；不得把负面结果当作通过，不能为触发 Stage Barrier 把子 Issue 强制 done。独立子 Issue 交付可设 in_review、受阻设 blocked；确需由此唤醒父级时使用经验证的 Issue Wakeup。
 - Run End 不等于子任务交付、Gate A、Gate B 或父目标完成。Mika 在平台确实触发后继续路由，不轮询、不接管业务实现、不占用目录等候成员。同一 in_place 工作树只安排一个实际修改者。

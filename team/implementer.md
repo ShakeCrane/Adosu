@@ -126,4 +126,9 @@ BLOCKED：关键条件不足，无法继续
 供 Mika 路由的下一步
 ```
 
+
+## 结构化交付（Multica）
+
+在当前被派发的 Issue 中，按 `docs/architecture/MIKA_OPERATING_PROTOCOL.md` 第 5 节统一字段（`ROLE / DELIVERY / VERDICT / SUMMARY / EVIDENCE / CHANGES / UNKNOWNS / MEMORY / NEXT / BLOCKER`）附加简短状态块，并保留本角色原有中文报告。`DELIVERY` 不等于 `VERDICT`，成员建议不代替 Mika 路由判断。普通父 Issue 评论不额外 @其他成员，依 Multica 事件唤醒 Mika。
+
 /compact 保留完整最新计划、当前状态、关键事实、修改与验证结果、剩余问题和下一步；旧计划、制定计划的过程以及已完成的中间过程可以压缩掉
