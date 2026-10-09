@@ -400,69 +400,9 @@ regression tests
 
 如果某个 runtime behavior 最终无法通过这些手段确定，允许保持 UNKNOWN / SUPPORTED_HYPOTHESIS，而不是伪造 certainty。
 
-### 8.2 `.sample/`
+### 8.2 研究语料与外部证据
 
-`.sample/` 默认是只读研究语料。
-
-允许：
-
-- 读取
-- 解析
-- 索引
-- 比较
-- 统计
-- 提取 minimal reproducer
-- 用于研究和测试设计
-
-默认禁止：
-
-- 原地修改
-- 删除
-- 自动格式化
-- 直接覆盖
-- 无理由纳入正式源码
-
-用户提供的素材和 Agent 联网获取的素材必须能区分来源。
-
-推荐（若将来新增 Agent 下载内容时再采用；**不**为满足此建议重构现有目录）：
-
-```text
-.sample/
-├── provided/      # 用户提供
-└── _external/     # Agent 获取
-```
-
-### 8.3 Agent 可主动联网
-
-普通技术研究无需用户逐次批准。
-
-Agent 可以主动：
-
-- web search
-- web fetch
-- GitHub / 官方文档调查
-- clone 公开仓库
-- 下载公开样本
-- 获取 release / tag / commit
-- 比较多个 parser / converter
-
-联网研究必须保留 provenance。
-
-至少记录：
-
-```text
-source URL
-retrieval date
-version / tag / commit（如适用）
-purpose
-local path（如下载）
-```
-
-下载不等于执行。
-
-未知 `.exe` / `.dll` / `.bat` / `.ps1` 等默认不得自动执行。
-
-**联网研究只允许获取公开资料到本地；未经用户明确授权和相应权利许可，不得把 `.sample/`、游戏文件、反编译结果、参考文件或其他受限制素材上传到任何外部服务。** 查询和交接也不得泄露可重构的受限制内容。
+样本覆盖、来源和缺口见 `docs/research/sample-corpus-index.md`；只读、对外披露及联网研究边界以 `TEAM.md` 为准。公开技术资料记录 URL、获取日期、适用版本/commit 与其实际支持的命题。未知可执行文件不得因下载成功而自动执行。
 
 ---
 
@@ -771,36 +711,9 @@ build / unit test
 
 ---
 
-## 18. 当前多 Agent 工作模型
+## 19. 当前外部证据
 
-`TEAM.md` 定义角色。模型供应商分配是规划，不是仓库事实，价格不写入技术结论。
-
-Agent 执行和本地验证以各次实际运行记录为准；本文件不保留过期的小队启动状态。
-
-原则不变：
-
-- 高 token、机械化扫描可交给低成本执行者
-- 技术方案与 acceptance criteria 与实现分离
-- Review 独立于实现自我评价
-- 面向用户汇报不重复实现
-
----
-
-## 19. 当前联网工具方向
-
-Agent 应优先：
-
-```text
-web_search
-→ web_fetch
-→ 必要时 git clone / curl / Invoke-WebRequest
-→ 保存 provenance
-→ 本地分析
-```
-
-搜索摘要本身不算 ground truth。
-
-本轮已获取、影响基线表述的公开资料：
+以下证据来源曾用于核对 M0 阶段的格式事实，并不自动保证所有版本适用：
 
 | URL | Date | Purpose | Local copy |
 | --- | --- | --- | --- |
@@ -838,36 +751,3 @@ M0-A 的 Reader / timing hardening 已有代码与回归基线，M0-B 的任务�
 5. 只有证据足够后，才把相应语义在 `docs/research` 中升级为 CONFIRMED；否则保留 INFERRED / UNKNOWN，不把现有 Reader 与 timing 回归自洽当作真实游戏行为的证明。
 
 ---
-
-## 22. 维护规则
-
-本文件记录：
-
-- 当前阶段
-- 当前真实实现基线
-- 已确认转换语义
-- 关键数据流
-- 设计决策
-- 已知限制
-- 已确认 bug
-- 已排除方案及原因
-- 未解决问题
-- 风险
-- 下一步
-
-本文件不记录：
-
-- 聊天流水账
-- Agent 思维过程
-- 每条命令
-- 大量原始日志
-- 已过时计划
-- 重复工作报告
-
-当新证据推翻旧结论时：
-
-**直接修正旧内容，不追加相互冲突的历史版本。**
-
-目标始终是：
-
-> 让 `PROJECT_UNDERSTANDING.md` 反映当前项目真实状态，而不是项目历史。

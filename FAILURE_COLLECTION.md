@@ -2,6 +2,8 @@
 
 本文件只记录真实、可追溯且具有复用价值的协作失败；记录失败不等于新增长期规则。事实、推断和未知原因分开书写。
 
+> 2026-10-09 注：下述各条中的“当前平台”和“修复”均描述**当时的结论/措施**，不代表现在有效的调度命令。现行规则以 `TEAM.md`、`docs/architecture/MIKA_OPERATING_PROTOCOL.md` 和平台实际系统协议为准；保留失败事实与原始验证状态。
+
 ## FC-2026-09-21-01 — AS-25 明确交付要求未在首轮交付中落实
 
 - **状态**：RECORDED / OPEN
@@ -24,6 +26,7 @@
 - **影响**：Stage 失去自动续接信号，需要人工重新唤醒或改状态，破坏持续目标的自主推进。
 - **修复**：保留 `done = 本子任务已交付` 语义，并升级为可执行合同：所有需要 Mika 自动续接的非 Mika 子任务在结束 Run 前必须显式执行并确认 `multica issue status <child-id> done --no-start`；`--no-start` 避免 completion status 写入额外启动 child 自身普通 Run，同时保留真实 `done` 状态变化供 Stage/parent 交接。非 Mika Agent 禁止主动设置子 Issue 为 `in_review`；每次 dispatch 必须把 completion action 写入任务合同末尾。
 - **验证状态**：NOT VERIFIED — 旧修复已确认复发；新修复需至少在真实 PASS 路径及一次非 PASS（如 `CHANGES REQUIRED / BLOCKED`）路径中验证无需用户人工改状态即可唤醒 Mika 并继续路由。
+- **后续状态（2026-10-09）**：旧的强制 `done --no-start` 子 Issue 补救已退役；普通串行交接改用 Squad 父 Issue 的成员结果评论事件。这是**规则更新**，不是已实测验证的自治 PASS；历史“只有 done 才唤醒”仅涉及当时的 Stage Barrier 工作方式。
 
 ## FC-2026-09-28-02 — Mika 将无需人工验收的父任务置为 `in_review`
 
@@ -35,3 +38,4 @@
 - **影响**：即使 Worker → Mika 的 `done` 唤醒链路正常，父任务仍可能在 Mika 收敛阶段停住，无法满足“无需逐阶段人工验收、持续推进至目标完成”的工作流目标。
 - **修复**：将 `in_review` 明确定义为真实人工 gate。Mika 在父目标仍有可执行工作时继续下一 Stage；总体目标与交接条件满足且没有人工 gate 时显式执行 `multica issue status <parent-id> done --no-start`，确认后报告 `COMPLETE`，避免最终状态写入再启动自身普通 Run。仅用户决策、额外授权、不可逆/破坏性操作、用户独有验证/证据或上位规则要求人工审批时允许等待用户。
 - **验证状态**：NOT VERIFIED — 需在后续真实父任务中确认：Stage 完成后仍有工作会自动继续；总体目标完成且无人工 gate 时会直接 `done`，不再停在 `in_review`。
+- **后续状态（2026-10-09）**：现行 Multica Squad 系统协议将父 Issue 完成后 `done` 保留给人类或已有授权集成；因此旧版强制父 Issue `done --no-start` 修复**已退役**。Mika 仍须自主推进所有合法后续 Stage，仅在真正整体完成时使用最终 `in_review`，这不是逐阶段人工验收。效果尚待真实业务自然观察。
