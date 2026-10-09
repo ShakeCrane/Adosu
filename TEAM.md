@@ -374,11 +374,11 @@ NEXT
 
 **默认使用 Squad 的同一父 Issue 评论接力。** 父 Issue 分配给 Mika 担任 Leader 的 Squad。Mika 依平台注入的 Squad Protocol / Roster 使用精确 mention 链接派工、记录 activity，随即停止本 Run；专业成员在当前父 Issue 留一次不额外 @其他 Agent 的可核查结果评论，平台依成员更新自动唤醒 Mika。Mika 判断下一任务、修复、复核、记忆维护、阻塞或最终收敛。不要为常规四角色串行交接创建大量子 Issue，也不重复编写平台的硬编码派工规则。
 
-**子 Issue 仅在交付或依赖需要独立生命周期时使用。** 已分配的 todo 子 Issue 创建时会自动启动，不能再为同一工作在父 Issue 另行 @mention；依赖未满足的下游放在 backlog。独立子 Issue 按真实合同在交付后进入 in_review，关键受阻则 blocked；不得为制造父级唤醒而把 CHANGES REQUIRED / BLOCKED / PARTIAL 强制伪装成 done。官方 Stage Barrier 只认进入终态的子 Issue，若需要子 Issue 在 in_review 后触发父级，应在经实测支持的版本上配置明确的 Issue Wakeup 条件。不要机械迁移历史 Issue 或默认启用重复触发器。
+**子 Issue 仅在交付或依赖需要独立生命周期时使用。** 已分配的 todo 子 Issue 创建时会自动启动，不能再为同一工作在父 Issue 另行 @mention；依赖未满足的下游放在 backlog。独立子 Issue 按真实合同在交付后进入 in_review，关键受阻则 blocked；不得为制造父级唤醒而把 CHANGES REQUIRED / BLOCKED / PARTIAL 强制伪装成 done。官方 Stage Barrier 只认进入终态的子 Issue，若需要子 Issue 在 in_review 后触发父级，应先以平台源码及安装版本对应的机制为依据配置 Issue Wakeup 条件，具体运行结果随真实任务记录。不要机械迁移历史 Issue 或默认启用重复触发器。
 
 **父级收敛不等于强制人工逐阶段验收。** Gate A（技术正确）和 Gate B（记忆、风险、工作树交接）均满足后，Mika 才报告 COMPLETE；在由 Squad 持有的父 Issue 上使用最终 in_review 表示整体已交付，而非中途等待用户。Multica 当前 Squad 系统协议将 done 留给人类或既有授权集成；Mika 不能靠提示词越过此约束。若用户要求无人介入自动关闭 done，须另行确认、授权并验证符合平台机制的集成后再启用。若仍有合法有效工作，Mika 必须继续，不得以平台建议 review 为理由提前停止。
 
-**版本与恢复。** GitHub main 的功能不等于本机 server/daemon 已支持。切换前验证 Squad 评论重触发、PASS 与非 PASS、Wakeup 及本地目录锁；Run 失败或消息没有触发时检查 Execution log、Issue timeline 和 Wakeup，并走可核查的恢复路径，绝不伪造 done。平台支持的事件才可承诺自动续接，等待期间 Agent 结束 Run 而不轮询。
+**版本与恢复。** 由网页版 GPT 依据 Multica 官方文档及实际源码核对 Squad 评论重触发、状态分支、Wakeup 与本地目录锁；用户只负责必要的本地基线设置，不为验证这些平台机制而运行空跑 Issue、PASS/FAIL 演练或专门可行性测试。源码机制记为静态确认，安装版本、配置和真实运行情况仍需区分，不虚报为本机实测 VERIFIED。在后续真实业务任务中自然收集运行证据；如 Run 失败或消息未触发，再检查 Execution log、Issue timeline 与 Wakeup，走可核查的恢复路径，绝不伪造 done。等待期间 Agent 结束 Run 而不轮询。
 
 技术完成且交接完整的稳定检查点才考虑 Git 保存；核实改动归属、权限、验证、目标分支和提交范围，采用 Conventional Commits。已有任务级授权时按约提交推送，否则保留工作树并说明。上位规则仍仅由用户与网页版 GPT 修改。
 
