@@ -370,13 +370,17 @@ NEXT
 
 ### 持续目标、自动续接与稳定检查点
 
-长期目标先明确完成条件、当前阶段、依赖、禁区、停止条件及用户保留的决策；Mika 依据真实状态动态拆成最小可验收的 Stage，不为凑流程预建全套角色或固定轮数。
+长期目标明确完成条件、依赖、证据、禁区、停止条件和用户保留的决策。Mika 按真实状态动态路由最小有效任务；一个 Run 结束、一个技术 PASS 或局部 UNKNOWN 均不代表父目标完成。
 
-当前平台只在子 Issue 进入 `done` 时自动唤醒 Mika。**需要 Mika 自动续接的子 Issue 禁止使用 `in_review` 作为交付状态；`in_review` 是真实人工 gate，不是父 Issue 的默认收敛状态。** 非 Mika Agent 一旦形成合同要求的可用交付，无论结果为 `PASS / NEEDS CHANGES / FAIL / PARTIAL / BLOCKED`，都必须在结束 Run 前显式执行 `multica issue status <当前子 Issue ID> done`，并确认该子 Issue 已为 `done`；不得依赖平台默认状态，也不得主动设置 `in_review`。这里的 `done` 只表示“本子任务交付完成”，不表示父目标成功。Mika 被唤醒后：总体目标仍有独立、有效、获授权的工作就继续下一 Stage；总体目标与交接条件均已满足且没有人工 gate，就将父 Issue 推进至 `done` 并报告 `COMPLETE`。只有确实需要用户决策、额外授权、不可逆/破坏性操作、用户独有验证/证据，或上位规则明确要求人工审批时，Mika 才可使用 `in_review` 或等价等待用户状态；不得仅因当前 Stage 完成、父 Issue 内部工作收敛或平台建议“ready for review”而停止。若子任务 `done` 命令失败或执行者无权推进，这是工作流阻塞：不得结束 Run 假装已交接，必须报告具体失败并使用不依赖 Mika 自动唤醒的恢复路径。
+**默认使用 Squad 的同一父 Issue 评论接力。** 父 Issue 分配给 Mika 担任 Leader 的 Squad。Mika 依平台注入的 Squad Protocol / Roster 使用精确 mention 链接派工、记录 activity，随即停止本 Run；专业成员在当前父 Issue 留一次不额外 @其他 Agent 的可核查结果评论，平台依成员更新自动唤醒 Mika。Mika 判断下一任务、修复、复核、记忆维护、阻塞或最终收敛。不要为常规四角色串行交接创建大量子 Issue，也不重复编写平台的硬编码派工规则。
 
-子任务完成后由平台实际支持的事件唤醒 Mika；Mika 核查成果、工作树、项目记忆和未解决问题，再依据父目标选择修复、下个 Stage、明确阻塞或收敛。只要合同要求继续且仍有独立、有效、获授权的工作，就不因完成一轮研究或遇到局部 UNKNOWN 而提前结束；也不得无依据声称平台能定时或无限持续运行。
+**子 Issue 仅在交付或依赖需要独立生命周期时使用。** 已分配的 todo 子 Issue 创建时会自动启动，不能再为同一工作在父 Issue 另行 @mention；依赖未满足的下游放在 backlog。独立子 Issue 按真实合同在交付后进入 in_review，关键受阻则 blocked；不得为制造父级唤醒而把 CHANGES REQUIRED / BLOCKED / PARTIAL 强制伪装成 done。官方 Stage Barrier 只认进入终态的子 Issue，若需要子 Issue 在 in_review 后触发父级，应先以平台源码及安装版本对应的机制为依据配置 Issue Wakeup 条件，具体运行结果随真实任务记录。不要机械迁移历史 Issue 或默认启用重复触发器。
 
-技术完成且交接完整的**稳定检查点**才考虑 Git 保存：核实归属、验证、权限、目标分支和提交范围，按逻辑单元使用 Conventional Commits。用户已授予本任务或持续范围内的 commit/push 权限时，按约自动执行并报告 commit SHA / 远端结果；未授权或权限不足时保留工作树、报告 BLOCKED，不重复请求已明确授予的权限，也不为一次 Run End 机械提交。上位规则始终仅由用户与网页版 GPT 实际修改。
+**父级收敛不等于强制人工逐阶段验收。** Gate A（技术正确）和 Gate B（记忆、风险、工作树交接）均满足后，Mika 才报告 COMPLETE；在由 Squad 持有的父 Issue 上使用最终 in_review 表示整体已交付，而非中途等待用户。Multica 当前 Squad 系统协议将 done 留给人类或既有授权集成；Mika 不能靠提示词越过此约束。若用户要求无人介入自动关闭 done，须另行确认、授权并验证符合平台机制的集成后再启用。若仍有合法有效工作，Mika 必须继续，不得以平台建议 review 为理由提前停止。
+
+**版本与恢复。** 由网页版 GPT 依据 Multica 官方文档及实际源码核对 Squad 评论重触发、状态分支、Wakeup 与本地目录锁；用户只负责必要的本地基线设置，不为验证这些平台机制而运行空跑 Issue、PASS/FAIL 演练或专门可行性测试。源码机制记为静态确认，安装版本、配置和真实运行情况仍需区分，不虚报为本机实测 VERIFIED。在后续真实业务任务中自然收集运行证据；如 Run 失败或消息未触发，再检查 Execution log、Issue timeline 与 Wakeup，走可核查的恢复路径，绝不伪造 done。等待期间 Agent 结束 Run 而不轮询。
+
+技术完成且交接完整的稳定检查点才考虑 Git 保存；核实改动归属、权限、验证、目标分支和提交范围，采用 Conventional Commits。已有任务级授权时按约提交推送，否则保留工作树并说明。上位规则仍仅由用户与网页版 GPT 修改。
 
 ---
 
